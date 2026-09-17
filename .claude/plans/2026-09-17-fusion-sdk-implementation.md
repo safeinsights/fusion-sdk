@@ -1,7 +1,7 @@
 # Fusion SDK — Implementation Plan (R and Python)
 
 **Date:** 2026-09-17
-**Status:** Plan only — `fusion-sdk` is an empty scaffold (README, no code). The decisions in §0.1 were confirmed by the product owner on 2026-09-17 (§11 records the answers and the one discussion, on round-liveness ownership); package naming (A2) is the only item still open, and it does not block Phase 0.
+**Status:** Plan only — `fusion-sdk` is an empty scaffold (README, no code). Every decision in §0.1 was confirmed by the product owner on 2026-09-17, including round-liveness ownership after the discussion recorded in §11; package naming (A2) is the only item still open, and it does not block Phase 0.
 **Authoritative spec:** `../SafeInsights Enclave Fusion Architecture Doc-v2.md` — §3 (invariants 1 and 6: outbound-only, researcher never touches the transport), §4.1 (the research-container-facing local API), **§4.5 (the SDK's two contracts: idempotency per `correlationId`, single in-flight round; ACK and duplicate suppression; typed errors)**, §7.1 (a round end to end), §7.3 (round liveness is owned by the destination SDK), §7.4, §7.5 (back-pressure surfaced as retryable), §7.6 (CLOSE via `POST /v1/complete`), §12 (event-level logging).
 **Authoritative sequence:** `../fusion-rc-querys.md` (two-party); `../drawings/fusion/FusionWithSafeInsightsEnclave-technical-phases/phase6-analysis-rounds.md` (hub: peer handle, single in-flight per leg, `complete()` fan-out).
 **Hub topology analysis:** `../.claude/fusion-hub-topology-review-2026-09-16.md` — §2.3 (source-side distinct-Person-ID guard lives in the SDK handler wrapper), §2.4 (per-leg items), §3 SDK row ("make it peer-addressed from day one"), §11 item 4 (SDK contract must land before the local API freezes).
@@ -72,14 +72,14 @@ The relay is invisible to the SDK by construction (§4.2: it reads routing metad
 | A3 | Envelope body encoding | UTF-8 JSON; tabular data in the typed-columnar **fusion table** shape (§1) | Apache Arrow IPC as the default | Arrow stays a reserved optional `encoding` for v1.1; as a default it would add `pyarrow` / `arrow` as hard dependencies, against constraint 2. |
 | A4 | Guard breach behavior | **Refuse**: `GUARD_REFUSED` error envelope to the destination, event log at the source, no partial result | Suppress small cells and return the rest | Matches "no silent throttling" (security review §7.3). |
 | A5 | Source loop concurrency | Sequential: one query at a time per tunnel | Threaded handlers | Single in-flight per leg means at most one outstanding query per tunnel. |
-| A6 | Round liveness | **Stays in the SDK** (v2 §7.3), invisible to researcher code: default 600 s round timeout, up to 3 same-`correlationId` re-issues, per-request override | Tunnel-owned re-issue | §11 Q3 explains why the tunnel cannot own the restart case; the tunnel owns every transport-level recovery. |
+| A6 | Round liveness | **Stays in the SDK** (v2 §7.3), invisible to researcher code: default 600 s round timeout, up to 3 same-`correlationId` re-issues, per-request override. **Decided 2026-09-17 after the §11 Q3 discussion** | Tunnel-owned re-issue | The tunnel cannot resend after its own restart (memory-only outbox); it owns every transport-level recovery. ADR 0004. |
 | A7 | Python floor | ≥ 3.10 (tested 3.10–3.13) | ≥ 3.9 | Pure stdlib, so lowering later is cheap if a Data Partner image needs it. |
 | A8 | R floor and HTTP client | R ≥ 4.1; Imports: `curl`, `jsonlite` only | `httr2` | Footprint (constraint 2); both are on effectively every Data Partner image. |
 | A9 | Python runtime deps | **Stdlib only** | `requests` / `httpx` | Extras: `[pandas]`; `[arrow]` later. |
 | A10 | Env contract for N legs | `FUSION_TUNNEL_ENDPOINTS` + `FUSION_TUNNEL_TOKENS` JSON maps keyed by leg label; single-leg shorthand `FUSION_TUNNEL_ENDPOINT` + `FUSION_TUNNEL_TOKEN`; `FUSION_ROLE` | One env var per leg | Alignment with setup-app is ask S1 (§4). |
-| A11 | Distribution | **Data Partners rebuild their base images** to pick up SDK releases — the `osenclave` model: the SDK is installed in the image at `org_code_env.url`, and the containerizer only appends researcher code. SafeInsights builds the hub's image the same way. Published to PyPI and r-universe/GitHub | Containerizer installs at build time | Vendoring (`vendor.sh` / `vendor.R`) stays a documented fallback, not the primary path. Consequence: compatibility across independently rebuilt images is a hard requirement (Risk 8). |
+| A11 | Distribution | **Data Partners rebuild their base images** to pick up SDK releases (confirmed 2026-09-17) — the `osenclave` model: the SDK is installed in the image at `org_code_env.url`, and the containerizer only appends researcher code. SafeInsights builds the hub's image the same way. Published to PyPI and r-universe/GitHub | Containerizer installs at build time | Vendoring (`vendor.sh` / `vendor.R`) stays a documented fallback, not the primary path. Consequence: compatibility across independently rebuilt images is a hard requirement (Risk 8). |
 | A12 | TOA upload helper | **Out of scope.** Result release stays with the Data Partner package | `release_results()` in the SDK | — |
-| A13 | Handler error detail across the channel | **Full traceback by default** | Sanitized class + one-line message | Everything reaching the destination enclave is gated by output review before release, and error envelopes are metered against the source's response-byte caps like any response. Per-operation `sanitize` opt-in retained (§1). |
+| A13 | Handler error detail across the channel | **Full traceback by default** — accepted **for now** (2026-09-17) | Sanitized class + one-line message | Everything reaching the destination enclave is gated by output review before release, and error envelopes are metered against the source's response-byte caps like any response. Per-operation `sanitize` opt-in retained (§1). Revisit triggers: a Data Partner objects at agreement review, or traceback bytes become a material share of a study's response budget. ADR 0005. |
 | A14 | License | **AGPL-3.0-or-later**, matching setup-app and the TOA | MIT (fusion-relay) | `LICENSE` and `CLA.md` land in Phase 1. |
 | A15 | Simulator timing | Phase 6 is **not required for the first fusion study** but is close behind | Ship with v1 | Phases 2–4 keep the transport behind one internal interface so the simulator is a transport swap, not a fork (Phase 6). |
 
@@ -161,7 +161,7 @@ fusion-sdk/
 ├── examples/
 │   ├── two-party/{source.py, destination.py, source.R, destination.R}
 │   └── hub/{destination.py, destination.R, source-a.R, source-b.py}   # cross-language on purpose
-└── docs/decisions/               # ADR 0001 envelope encoding, 0002 guards semantics, 0003 distribution
+└── docs/decisions/               # ADR 0001 envelope, 0002 guards, 0003 distribution, 0004 round-liveness ownership, 0005 error detail
 ```
 
 ---
@@ -323,9 +323,9 @@ Retryable conditions (`429`, `503` pre-ready, connection reset, `5xx`) are handl
 
 ## Phase 0 — Contract spec and decisions
 
-**Goal:** `spec/` complete and reviewed with the tunnel-app owner; ADR 0001 (envelope), ADR 0002 (guards), ADR 0003 (distribution) recorded from the §11 decisions.
+**Goal:** `spec/` complete and reviewed with the tunnel-app owner; ADR 0001 (envelope), ADR 0002 (guards), ADR 0003 (distribution), ADR 0004 (round-liveness ownership), ADR 0005 (error detail across the channel) recorded from the §11 decisions.
 
-**Work:** write `spec/envelope.schema.json`, `spec/errors.*`, `spec/local-api.md` (mirroring the tunnel plan's Phase 2 route semantics and adding T1–T6 as marked proposals), `spec/env.md`, ~40 golden fixtures, the scenario list; name-collision check on PyPI/CRAN to feed the open A2 decision; open the T1–T6 / S1 asks as issues on the owning repos.
+**Work:** write `spec/envelope.schema.json`, `spec/errors.*`, `spec/local-api.md` (mirroring the tunnel plan's Phase 2 route semantics and adding T1–T6 as marked proposals), `spec/env.md`, ~40 golden fixtures, the scenario list; record ADR 0001–0005 from the §11 decisions; name-collision check on PyPI/CRAN to feed the open A2 decision; open the T1–T6 / S1 asks as issues on the owning repos.
 
 **Tests:** fixtures validate against the schema (a stdlib-only validator in `tools/`); CI runs schema validation on every push.
 
@@ -415,20 +415,22 @@ Adopted from the memo and the tunnel plan §10 as the SDK's day-one shape rather
 
 ## 11. Decisions recorded 2026-09-17 (product owner)
 
+Two rounds on the same day. The first answered Q1–Q10; the second confirmed Q3 in favor of SDK ownership after the discussion below, confirmed Q4, and accepted Q7 for now. All ten are closed; only package naming (A2) remains open.
+
 | Q | Question | Answer | Applied in |
 | :-- | :-- | :-- | :-- |
 | 1 | Payload/table encoding | Typed-columnar JSON is acceptable for v1 | A3, §1 |
 | 2 | Guard breach semantics | Refuse | A4, §2.2, §3 |
-| 3 | Re-issue ownership: SDK or tunnel? | Discussed below — stays in the SDK, invisible to researchers | A6, T1 |
-| 4 | Distribution | Data Partners rebuild their base images | A11, S2, Risk 8 |
+| 3 | Re-issue ownership: SDK or tunnel? | **Decided: the SDK owns liveness policy; the tunnel owns transport recovery** (discussion below) | A6, T1, ADR 0004 |
+| 4 | Distribution | **Confirmed:** Data Partners rebuild their base images | A11, S2, Risk 8 |
 | 5 | Repo shape and names | One repo; naming deferred | A1; A2 **open** |
 | 6 | TOA helper | Keep it out of the SDK | A12 |
-| 7 | Handler error detail | Full tracebacks — errors are reviewed in the Management App like results before release | A13, §1 |
+| 7 | Handler error detail | Full tracebacks, **accepted for now** — errors are reviewed in the Management App like results before release; revisit triggers in A13 | A13, §1, ADR 0005 |
 | 8 | Python floor | ≥ 3.10 | A7 |
 | 9 | License | AGPL-3.0-or-later | A14, §0.2 |
 | 10 | Simulator priority | Not needed for the first study, but not far behind | A15, Phase 6 |
 
-**Q3 — who owns round re-issue.** The product owner's concern: researchers use the SDK and should not be managing reliability; the Tunnel App should. The goal is shared, and the plan meets it — re-issue is SafeInsights' SDK code, never researcher code. `request()` returns a result or raises a typed error; researchers never see a `correlationId`, a timeout loop, or a resend. The *mechanism* nonetheless cannot move into the tunnel for one case: when the **destination tunnel itself restarts**, its memory-only outbox and every in-flight `correlationId` die with it (v2 §4.1, §7.3; read-only root filesystem at the hub). At that moment the research container is the only process that still holds the query, so only it can resend — and the SDK already holds it, because the researcher's parameters are in memory inside the blocked `request()` call. Everything else stays with the tunnel: outbox re-encryption and retransmission across epoch changes, the relay's redelivery within an epoch, and cached-response replay at the source so a resend never re-runs the operation and never spends a second round of the Data Partner's budget. That last property is exactly why the resend must carry the **same** `correlationId` (ask T1): a fresh id would recompute at the source and double-count against `maxRounds`. Net: liveness **policy** (timeout, resend, give up) lives in the SDK as v2 §7.3 specifies, with defaults the researcher never touches; every **transport** recovery lives in the tunnel. If the tunnel team prefers, T1 can be shaped as the SDK minting the `correlationId` up front (idempotency-key style), so a resend is byte-identical to the first submit and the tunnel's route stays a plain idempotent POST.
+**Q3 — who owns round re-issue (decided for the SDK, 2026-09-17).** The product owner's concern: researchers use the SDK and should not be managing reliability; the Tunnel App should. The goal is shared, and the plan meets it — re-issue is SafeInsights' SDK code, never researcher code. `request()` returns a result or raises a typed error; researchers never see a `correlationId`, a timeout loop, or a resend. The *mechanism* nonetheless cannot move into the tunnel for one case: when the **destination tunnel itself restarts**, its memory-only outbox and every in-flight `correlationId` die with it (v2 §4.1, §7.3; read-only root filesystem at the hub). At that moment the research container is the only process that still holds the query, so only it can resend — and the SDK already holds it, because the researcher's parameters are in memory inside the blocked `request()` call. Everything else stays with the tunnel: outbox re-encryption and retransmission across epoch changes, the relay's redelivery within an epoch, and cached-response replay at the source so a resend never re-runs the operation and never spends a second round of the Data Partner's budget. That last property is exactly why the resend must carry the **same** `correlationId` (ask T1): a fresh id would recompute at the source and double-count against `maxRounds`. Net: liveness **policy** (timeout, resend, give up) lives in the SDK as v2 §7.3 specifies, with defaults the researcher never touches; every **transport** recovery lives in the tunnel. If the tunnel team prefers, T1 can be shaped as the SDK minting the `correlationId` up front (idempotency-key style), so a resend is byte-identical to the first submit and the tunnel's route stays a plain idempotent POST.
 
 **Still open:** A2 package names (due before Phase 7 publishes anything).
 

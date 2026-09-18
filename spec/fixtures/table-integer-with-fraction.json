@@ -1,0 +1,22 @@
+{
+  "id": "table-integer-with-fraction",
+  "description": "A fractional value in an integer column is rejected.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        2.5
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

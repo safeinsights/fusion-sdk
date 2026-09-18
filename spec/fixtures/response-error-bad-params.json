@@ -1,0 +1,22 @@
+{
+  "id": "response-error-bad-params",
+  "description": "Error envelope without detail.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "BAD_PARAMS",
+      "message": "params is not an object"
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "error",
+    "code": "BAD_PARAMS"
+  }
+}

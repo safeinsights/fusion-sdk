@@ -1,0 +1,43 @@
+{
+  "id": "table-number-special",
+  "description": "number cells: extremes, negative zero, scientific notation.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "x",
+        "type": "number"
+      }
+    ],
+    "rows": [
+      [
+        1e+308
+      ],
+      [
+        -0.5
+      ],
+      [
+        1.5e-10
+      ],
+      [
+        0
+      ],
+      [
+        123456789.125
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 5,
+    "ncol": 1,
+    "names": [
+      "x"
+    ],
+    "types": [
+      "number"
+    ]
+  }
+}

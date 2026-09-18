@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://safeinsights.org/fusion/scenario/v1",
+  "title": "fake-tunnel-pair scenario",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "legs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "legId": { "type": "string", "minLength": 1 },
+          "peerOrgSlug": { "type": "string", "minLength": 1 },
+          "caps": { "$ref": "#/$defs/caps" },
+          "guards": { "$ref": "#/$defs/guards" },
+          "operations": { "$ref": "#/$defs/operations" },
+          "faults": { "$ref": "#/$defs/faults" }
+        },
+        "required": ["legId", "peerOrgSlug"],
+        "additionalProperties": false
+      }
+    },
+    "readyDelayMs": { "type": "integer", "minimum": 0 },
+    "longpollMs": { "type": "integer", "minimum": 1 },
+    "redeliveryMs": { "type": "integer", "minimum": 1 },
+    "maxDeliveries": { "type": "integer", "minimum": 1 },
+    "caps": { "$ref": "#/$defs/caps" },
+    "guards": { "$ref": "#/$defs/guards" },
+    "operations": { "$ref": "#/$defs/operations" },
+    "faults": { "$ref": "#/$defs/faults" }
+  },
+  "required": ["id", "legs"],
+  "additionalProperties": false,
+  "$defs": {
+    "caps": {
+      "type": ["object", "null"],
+      "properties": {
+        "maxRounds": { "type": ["integer", "null"], "minimum": 1 },
+        "maxResponseBytes": { "type": ["integer", "null"], "minimum": 1 },
+        "maxResponseBytesPerRound": { "type": ["integer", "null"], "minimum": 1 },
+        "maxQueryBytes": { "type": ["integer", "null"], "minimum": 1 },
+        "maxQueryBytesPerRound": { "type": ["integer", "null"], "minimum": 1 },
+        "maxRoundsPerHour": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "guards": {
+      "type": ["object", "null"],
+      "properties": {
+        "maxDistinctPersonIds": { "type": ["integer", "null"], "minimum": 1 },
+        "minGroupSize": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "operations": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "cardinality": { "enum": ["aggregate", "per-group", "per-record"] }
+        },
+        "required": ["name", "cardinality"],
+        "additionalProperties": false
+      }
+    },
+    "roundList": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+    "faults": {
+      "type": "object",
+      "properties": {
+        "backpressureOnRequest": { "$ref": "#/$defs/roundList" },
+        "backpressureOnRespond": { "$ref": "#/$defs/roundList" },
+        "notReadyOnRequest": { "$ref": "#/$defs/roundList" },
+        "serverErrorOnRequest": { "$ref": "#/$defs/roundList" },
+        "dropResponseRounds": { "$ref": "#/$defs/roundList" },
+        "forgetCorrelationRounds": { "$ref": "#/$defs/roundList" },
+        "redeliverAfterAckRounds": { "$ref": "#/$defs/roundList" },
+        "delayDeliveryMs": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "errorAfterRound": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

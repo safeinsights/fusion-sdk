@@ -1,0 +1,19 @@
+{
+  "id": "response-ok-scalar",
+  "description": "A bare number body.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": 42,
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

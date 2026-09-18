@@ -1,0 +1,29 @@
+{
+  "id": "query-person-ids",
+  "description": "Typical batched query: a list of Person IDs plus a grouping key.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "counts_by_group",
+    "params": {
+      "person_ids": [
+        "p-001",
+        "p-002",
+        "p-003"
+      ],
+      "group_by": "grade"
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "query",
+    "operation": "counts_by_group",
+    "paramKeys": [
+      "group_by",
+      "person_ids"
+    ]
+  }
+}

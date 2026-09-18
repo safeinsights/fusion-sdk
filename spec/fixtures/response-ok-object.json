@@ -1,0 +1,26 @@
+{
+  "id": "response-ok-object",
+  "description": "Nested object body, no table marker.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "mean": 3.5,
+      "n": 12,
+      "by": {
+        "9": 4,
+        "10": 8
+      }
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

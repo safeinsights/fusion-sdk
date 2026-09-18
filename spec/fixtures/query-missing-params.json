@@ -1,0 +1,13 @@
+{
+  "id": "query-missing-params",
+  "description": "params is required even when empty.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count"
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

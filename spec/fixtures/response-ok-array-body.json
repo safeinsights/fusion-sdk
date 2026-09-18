@@ -1,0 +1,23 @@
+{
+  "id": "response-ok-array-body",
+  "description": "Array body is plain JSON, not a table.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": [
+      1,
+      "two",
+      null
+    ],
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

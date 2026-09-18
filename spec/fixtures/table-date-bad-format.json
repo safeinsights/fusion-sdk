@@ -1,0 +1,22 @@
+{
+  "id": "table-date-bad-format",
+  "description": "Slashes are not ISO-8601.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "d",
+        "type": "date"
+      }
+    ],
+    "rows": [
+      [
+        "2026/01/01"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

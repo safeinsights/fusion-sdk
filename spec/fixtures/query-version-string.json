@@ -1,0 +1,14 @@
+{
+  "id": "query-version-string",
+  "description": "v must be the number 1, not the string.",
+  "kind": "envelope",
+  "input": {
+    "v": "1",
+    "kind": "query",
+    "operation": "count",
+    "params": {}
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

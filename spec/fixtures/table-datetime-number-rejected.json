@@ -1,0 +1,22 @@
+{
+  "id": "table-datetime-number-rejected",
+  "description": "Epoch numbers are not datetimes.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        1758196800
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

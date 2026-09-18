@@ -1,0 +1,19 @@
+{
+  "id": "response-ok-null-body",
+  "description": "null is a valid body (operation with no result).",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": null,
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

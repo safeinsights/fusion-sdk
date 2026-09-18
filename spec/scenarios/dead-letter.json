@@ -1,0 +1,1 @@
+{"id":"dead-letter","description":"maxDeliveries 2 with fast redelivery; a never-ACKing source dead-letters.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"redeliveryMs":200,"maxDeliveries":2}

@@ -1,0 +1,29 @@
+{
+  "id": "response-ok-table-no-columns",
+  "description": "A table with no columns and no rows is valid.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "__table__": 1,
+      "columns": [],
+      "rows": []
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": true,
+    "table": {
+      "nrow": 0,
+      "ncol": 0,
+      "names": [],
+      "types": []
+    }
+  }
+}

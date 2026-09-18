@@ -1,0 +1,1 @@
+{"id":"limit-exceeded-bytes","description":"maxResponseBytesPerRound 64; a large response breaches at POST /v1/messages.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"caps":{"maxResponseBytesPerRound":64}}

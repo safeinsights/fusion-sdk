@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://safeinsights.org/fusion/envelope/v1",
+  "title": "Fusion envelope v1",
+  "description": "The JSON the fusion SDK places inside the tunnel's opaque payload. Owned by fusion-sdk; the tunnel never interprets it. See spec/local-api.md for the transport that carries it.",
+  "$ref": "#/$defs/envelope",
+  "$defs": {
+    "envelope": {
+      "oneOf": [
+        { "$ref": "#/$defs/query" },
+        { "$ref": "#/$defs/responseOk" },
+        { "$ref": "#/$defs/responseError" }
+      ]
+    },
+    "version": { "const": 1 },
+    "encoding": {
+      "description": "Body encoding. v1 defines only json; arrow is reserved for v1.1.",
+      "enum": ["json"]
+    },
+    "operationName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "v": { "$ref": "#/$defs/version" },
+        "kind": { "const": "query" },
+        "operation": { "$ref": "#/$defs/operationName" },
+        "params": { "type": "object" },
+        "encoding": { "$ref": "#/$defs/encoding" }
+      },
+      "required": ["v", "kind", "operation", "params"],
+      "additionalProperties": false
+    },
+    "responseOk": {
+      "type": "object",
+      "properties": {
+        "v": { "$ref": "#/$defs/version" },
+        "kind": { "const": "response" },
+        "status": { "const": "ok" },
+        "body": { "$ref": "#/$defs/body" },
+        "encoding": { "$ref": "#/$defs/encoding" }
+      },
+      "required": ["v", "kind", "status", "body"],
+      "additionalProperties": false
+    },
+    "responseError": {
+      "type": "object",
+      "properties": {
+        "v": { "$ref": "#/$defs/version" },
+        "kind": { "const": "response" },
+        "status": { "const": "error" },
+        "error": { "$ref": "#/$defs/remoteError" },
+        "encoding": { "$ref": "#/$defs/encoding" }
+      },
+      "required": ["v", "kind", "status", "error"],
+      "additionalProperties": false
+    },
+    "remoteError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Remote error codes travel in the envelope and are raised at the destination as RemoteError. The list is closed for v1; see spec/errors.json.",
+          "enum": ["UNKNOWN_OPERATION", "BAD_PARAMS", "HANDLER_ERROR", "GUARD_REFUSED"]
+        },
+        "message": { "type": "string", "maxLength": 65536 },
+        "detail": { "type": "object" }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "body": {
+      "description": "Any JSON value. A fusion table is a convention the helpers recognise by its __table__ marker, not a requirement.",
+      "anyOf": [
+        { "$ref": "#/$defs/table" },
+        { "not": { "$ref": "#/$defs/tableMarked" } }
+      ]
+    },
+    "tableMarked": {
+      "type": "object",
+      "properties": { "__table__": {} },
+      "required": ["__table__"]
+    },
+    "columnType": {
+      "enum": ["string", "integer", "integer64", "number", "boolean", "date", "datetime"]
+    },
+    "column": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/columnType" }
+      },
+      "required": ["name", "type"],
+      "additionalProperties": false
+    },
+    "table": {
+      "description": "Typed-columnar table. rows[i] has exactly columns.length cells; each cell is null or a value valid for its column type (checked by the SDK decoders, not by this schema).",
+      "type": "object",
+      "properties": {
+        "__table__": { "const": 1 },
+        "columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/column" }
+        },
+        "rows": {
+          "type": "array",
+          "items": { "type": "array" }
+        }
+      },
+      "required": ["__table__", "columns", "rows"],
+      "additionalProperties": false
+    }
+  }
+}

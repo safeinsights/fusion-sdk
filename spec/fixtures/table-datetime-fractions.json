@@ -1,0 +1,63 @@
+{
+  "id": "table-datetime-fractions",
+  "description": "Datetimes with 0, 3 and 6 fractional digits; canonical form truncates to milliseconds.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18T12:00:00Z"
+      ],
+      [
+        "2026-09-18T12:00:00.123Z"
+      ],
+      [
+        "2026-09-18T12:00:00.123456Z"
+      ],
+      [
+        "2026-09-18T12:00:00.100Z"
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18T12:00:00Z"
+      ],
+      [
+        "2026-09-18T12:00:00.123Z"
+      ],
+      [
+        "2026-09-18T12:00:00.123Z"
+      ],
+      [
+        "2026-09-18T12:00:00.100Z"
+      ]
+    ]
+  },
+  "decoded": {
+    "nrow": 4,
+    "ncol": 1,
+    "names": [
+      "t"
+    ],
+    "types": [
+      "datetime"
+    ]
+  }
+}

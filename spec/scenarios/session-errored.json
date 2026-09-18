@@ -1,0 +1,1 @@
+{"id":"session-errored","description":"Both tunnels go SESSION_ERRORED after round 1.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"errorAfterRound":1}}

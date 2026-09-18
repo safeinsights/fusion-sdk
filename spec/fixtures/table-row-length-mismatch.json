@@ -1,0 +1,30 @@
+{
+  "id": "table-row-length-mismatch",
+  "description": "Every row has exactly one cell per column.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "grade",
+        "type": "string"
+      },
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        "9",
+        1
+      ],
+      [
+        "10"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

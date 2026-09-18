@@ -1,0 +1,51 @@
+{
+  "id": "table-integer-whole-float-lenient",
+  "description": "Decoders accept a whole-number float in an integer column; the canonical form has no fraction.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        2.0
+      ],
+      [
+        3
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        2
+      ],
+      [
+        3
+      ]
+    ]
+  },
+  "decoded": {
+    "nrow": 2,
+    "ncol": 1,
+    "names": [
+      "n"
+    ],
+    "types": [
+      "integer"
+    ]
+  }
+}

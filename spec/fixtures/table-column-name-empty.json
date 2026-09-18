@@ -1,0 +1,22 @@
+{
+  "id": "table-column-name-empty",
+  "description": "Column names are non-empty.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "rows": [
+      [
+        "x"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

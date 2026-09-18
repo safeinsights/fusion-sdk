@@ -1,0 +1,31 @@
+{
+  "id": "table-number-integer-literal",
+  "description": "A JSON integer literal in a number column decodes as a double.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "x",
+        "type": "number"
+      }
+    ],
+    "rows": [
+      [
+        3
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 1,
+    "ncol": 1,
+    "names": [
+      "x"
+    ],
+    "types": [
+      "number"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"id":"transient-errors","description":"One 503 and one 500 on submits after the channel is up.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":500,"faults":{"notReadyOnRequest":[2],"serverErrorOnRequest":[3]}}

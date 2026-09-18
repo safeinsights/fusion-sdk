@@ -1,0 +1,1 @@
+{"id":"restart-404","description":"Destination tunnel forgets round 2; first poll returns 404.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"forgetCorrelationRounds":[2]}}

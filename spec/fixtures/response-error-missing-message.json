@@ -1,0 +1,16 @@
+{
+  "id": "response-error-missing-message",
+  "description": "message is required.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "BAD_PARAMS"
+    }
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "table-integer64-not-string",
+  "description": "integer64 cells given as numbers are rejected.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer64"
+      }
+    ],
+    "rows": [
+      [
+        5
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

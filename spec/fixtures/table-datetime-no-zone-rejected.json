@@ -1,0 +1,22 @@
+{
+  "id": "table-datetime-no-zone-rejected",
+  "description": "A datetime without a zone designator is rejected.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18T12:00:00"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

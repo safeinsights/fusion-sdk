@@ -1,0 +1,14 @@
+{
+  "id": "query-bad-version",
+  "description": "Only v 1 exists.",
+  "kind": "envelope",
+  "input": {
+    "v": 2,
+    "kind": "query",
+    "operation": "count",
+    "params": {}
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "table-integer64-bad-string",
+  "description": "integer64 strings must be digits only.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer64"
+      }
+    ],
+    "rows": [
+      [
+        "12a"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

@@ -1,0 +1,38 @@
+{
+  "id": "table-one-row",
+  "description": "A single row must stay a list of rows (R auto_unbox pitfall).",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "grade",
+        "type": "string"
+      },
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        "9",
+        412
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 1,
+    "ncol": 2,
+    "names": [
+      "grade",
+      "n"
+    ],
+    "types": [
+      "string",
+      "integer"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "response-ok-table",
+  "description": "The canonical fusion table body from the plan.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "__table__": 1,
+      "columns": [
+        {
+          "name": "grade",
+          "type": "string"
+        },
+        {
+          "name": "n",
+          "type": "integer"
+        }
+      ],
+      "rows": [
+        [
+          "9",
+          412
+        ],
+        [
+          "10",
+          388
+        ]
+      ]
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": true,
+    "table": {
+      "nrow": 2,
+      "ncol": 2,
+      "names": [
+        "grade",
+        "n"
+      ],
+      "types": [
+        "string",
+        "integer"
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "table-integer-safe-max",
+  "description": "2^53 - 1 is the largest integer allowed as a JSON number.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        9007199254740991
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 1,
+    "ncol": 1,
+    "names": [
+      "n"
+    ],
+    "types": [
+      "integer"
+    ]
+  }
+}

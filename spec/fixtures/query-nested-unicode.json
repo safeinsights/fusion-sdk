@@ -1,0 +1,37 @@
+{
+  "id": "query-nested-unicode",
+  "description": "Nested params with unicode, escapes and every JSON scalar type.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "predicate_match",
+    "params": {
+      "filters": [
+        {
+          "field": "name",
+          "op": "≈",
+          "value": "José \"O'Brien\"\n"
+        }
+      ],
+      "limit": 10,
+      "ratio": 0.25,
+      "flag": true,
+      "nothing": null
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "query",
+    "operation": "predicate_match",
+    "paramKeys": [
+      "filters",
+      "flag",
+      "limit",
+      "nothing",
+      "ratio"
+    ]
+  }
+}

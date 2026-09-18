@@ -1,0 +1,27 @@
+{
+  "id": "response-error-guard",
+  "description": "Guard refusal carries guard and limit, not the data.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "GUARD_REFUSED",
+      "message": "query exceeds maxDistinctPersonIds",
+      "detail": {
+        "guard": "maxDistinctPersonIds",
+        "limit": 5000,
+        "observed": 6120
+      }
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "error",
+    "code": "GUARD_REFUSED"
+  }
+}

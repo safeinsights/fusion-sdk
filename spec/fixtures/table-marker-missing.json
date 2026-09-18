@@ -1,0 +1,21 @@
+{
+  "id": "table-marker-missing",
+  "description": "Without __table__ an object is a plain body, not a table.",
+  "kind": "table",
+  "input": {
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        1
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "query-unknown-kind",
+  "description": "kind is query or response.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "ping",
+    "operation": "count",
+    "params": {}
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "query-minimal",
+  "description": "Smallest valid query; encoding defaults to json.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": {}
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": {},
+    "encoding": "json"
+  },
+  "decoded": {
+    "kind": "query",
+    "operation": "count"
+  }
+}

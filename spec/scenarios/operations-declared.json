@@ -1,0 +1,1 @@
+{"id":"operations-declared","description":"Approved operation list on /v1/info.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"operations":[{"name":"counts_by_group","cardinality":"per-group"},{"name":"total","cardinality":"aggregate"}]}

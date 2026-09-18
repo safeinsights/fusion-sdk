@@ -1,0 +1,19 @@
+{
+  "id": "response-ok-string-unicode",
+  "description": "String body with non-ASCII text.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": "héllo ✓ 日本",
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

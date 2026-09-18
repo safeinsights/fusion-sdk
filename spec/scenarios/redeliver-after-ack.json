@@ -1,0 +1,1 @@
+{"id":"redeliver-after-ack","description":"Query 2 is redelivered to the source RC after its ACK.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"redeliverAfterAckRounds":[2]}}

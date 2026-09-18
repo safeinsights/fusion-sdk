@@ -1,0 +1,1 @@
+{"id":"timeout-reissue","description":"Round 2 response cached at the source tunnel but never delivered; re-issue replays it.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"dropResponseRounds":[2]}}

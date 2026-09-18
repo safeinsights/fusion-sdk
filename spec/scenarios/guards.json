@@ -1,0 +1,1 @@
+{"id":"guards","description":"Guards published on /v1/info.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"guards":{"maxDistinctPersonIds":5,"minGroupSize":3}}

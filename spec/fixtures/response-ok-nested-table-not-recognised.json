@@ -1,0 +1,39 @@
+{
+  "id": "response-ok-nested-table-not-recognised",
+  "description": "Only a top-level table body is decoded as a table; nested ones are plain JSON.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "result": {
+        "__table__": 1,
+        "columns": [
+          {
+            "name": "grade",
+            "type": "string"
+          },
+          {
+            "name": "n",
+            "type": "integer"
+          }
+        ],
+        "rows": [
+          [
+            "9",
+            1
+          ]
+        ]
+      }
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

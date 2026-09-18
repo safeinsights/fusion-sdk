@@ -1,0 +1,15 @@
+{
+  "id": "query-extra-field",
+  "description": "No additional properties on the envelope.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": {},
+    "correlationId": "x"
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

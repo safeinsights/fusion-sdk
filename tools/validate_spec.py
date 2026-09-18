@@ -65,8 +65,8 @@ class Validator:
         if not ref.startswith("#/"):
             raise SchemaError(f"only local refs are supported: {ref}")
         node: JSON = self.root
-        for part in ref[2:].split("/"):
-            part = part.replace("~1", "/").replace("~0", "~")
+        for raw_part in ref[2:].split("/"):
+            part = raw_part.replace("~1", "/").replace("~0", "~")
             node = node[part]
         return self.validate(inst, node, path)
 
@@ -206,7 +206,7 @@ def _json_equal(a: JSON, b: JSON) -> bool:
     if isinstance(a, dict) and isinstance(b, dict):
         return a.keys() == b.keys() and all(_json_equal(a[k], b[k]) for k in a)
     if isinstance(a, list) and isinstance(b, list):
-        return len(a) == len(b) and all(_json_equal(x, y) for x, y in zip(a, b))
+        return len(a) == len(b) and all(_json_equal(x, y) for x, y in zip(a, b, strict=True))
     return type(a) is type(b) and a == b
 
 
@@ -257,7 +257,10 @@ def check_fixtures(spec: Path, envelope: Validator) -> list[str]:
         errors = envelope.validate(fx["input"], schema)
         if bool(errors) == bool(fx.get("schemaValid")):
             verdict = "rejected" if errors else "accepted"
-            problems.append(f"{f.name}: schema {verdict} input but schemaValid={fx.get('schemaValid')}" + (f" ({errors[0]})" if errors else ""))
+            problems.append(
+                f"{f.name}: schema {verdict} input but schemaValid={fx.get('schemaValid')}"
+                + (f" ({errors[0]})" if errors else "")
+            )
         if "canonical" in fx:
             cerrors = envelope.validate(fx["canonical"], schema)
             if cerrors:

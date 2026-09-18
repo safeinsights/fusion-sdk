@@ -1,0 +1,8 @@
+# License suppressions for Trivy's license scanner (see .github/workflows/checks.yml).
+#
+# The SDK has no runtime dependencies in Python and only `curl` + `jsonlite` in R
+# (both MIT), so nothing is suppressed today. A new entry here is a review trigger:
+# it means a dependency with a HIGH/CRITICAL-classified license entered the tree,
+# which ADR 0003 (pure-language, ubiquitous dependencies only) forbids without a
+# new decision record.
+licenses: []

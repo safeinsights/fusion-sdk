@@ -69,9 +69,19 @@ def test_fixture_expectations_are_independent(envelope: vs.Validator, tmp_path: 
     (spec / "scenarios").mkdir()
     for name in ("envelope.schema.json", "errors.json"):
         (spec / name).write_text((ROOT / "spec" / name).read_text())
-    (spec / "scenarios" / "scenario.schema.json").write_text((ROOT / "spec" / "scenarios" / "scenario.schema.json").read_text())
+    (spec / "scenarios" / "scenario.schema.json").write_text(
+        (ROOT / "spec" / "scenarios" / "scenario.schema.json").read_text()
+    )
     (spec / "scenarios" / "s.json").write_text(json.dumps({"id": "s", "legs": [{"legId": "l", "peerOrgSlug": "p"}]}))
-    bad = {"id": "bad", "description": "", "kind": "envelope", "input": {"v": 2}, "valid": False, "schemaValid": True, "error": "DECODE"}
+    bad = {
+        "id": "bad",
+        "description": "",
+        "kind": "envelope",
+        "input": {"v": 2},
+        "valid": False,
+        "schemaValid": True,
+        "error": "DECODE",
+    }
     (spec / "fixtures" / "bad.json").write_text(json.dumps(bad))
     assert vs.main(["validate_spec", str(tmp_path)]) == 1
 

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "safeinsights-fusion"
+version = "0.1.0"
+description = "SafeInsights Fusion SDK: researcher-facing client for the Enclave Fusion Framework (destination request/response and source operation handlers over the Fusion Tunnel App local API)"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "SafeInsights" }]
+keywords = ["safeinsights", "fusion", "enclave", "privacy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+# Runtime dependencies: none, by design (ADR 0003). Extras are opt-in.
+dependencies = []
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0"]
+
+[project.urls]
+Homepage = "https://github.com/safeinsights/fusion-sdk"
+Source = "https://github.com/safeinsights/fusion-sdk"
+Changelog = "https://github.com/safeinsights/fusion-sdk/blob/main/CHANGELOG.md"
+
+[project.scripts]
+fusion-doctor = "safeinsights_fusion.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/safeinsights_fusion"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/safeinsights_fusion", "README.md", "LICENSE", "pyproject.toml"]

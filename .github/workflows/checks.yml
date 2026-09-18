@@ -1,0 +1,142 @@
+name: Checks
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+permissions:
+    contents: read
+
+env:
+    UV_LOCKED: '1'
+
+jobs:
+    spec:
+        name: Spec (fixtures + scenarios)
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+            - name: Validate spec against schemas
+              run: python3 tools/validate_spec.py
+
+    python:
+        name: Python ${{ matrix.python-version }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ['3.10', '3.11', '3.12', '3.13']
+        steps:
+            - uses: actions/checkout@v6
+            - uses: astral-sh/setup-uv@v6
+              with:
+                  enable-cache: true
+                  python-version: ${{ matrix.python-version }}
+            - name: Install
+              run: uv sync --group dev
+            - name: Lint
+              run: uv run ruff check .
+            - name: Format
+              run: uv run ruff format --check .
+            - name: Typecheck
+              run: uv run mypy
+            - name: Test
+              run: uv run pytest -q
+            - name: Build
+              run: uv build --project python --out-dir dist
+            - name: Install the wheel into a clean interpreter and import it
+              run: |
+                  uv venv --python ${{ matrix.python-version }} /tmp/clean
+                  uv pip install --python /tmp/clean/bin/python dist/*.whl
+                  /tmp/clean/bin/python -c "import safeinsights_fusion; print(safeinsights_fusion.__version__)"
+
+    r:
+        name: R ${{ matrix.r-version }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        strategy:
+            fail-fast: false
+            matrix:
+                r-version: ['4.1', 'release']
+        env:
+            R_KEEP_PKG_SOURCE: yes
+            _R_CHECK_FORCE_SUGGESTS_: false
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-pandoc@v2
+            - uses: r-lib/actions/setup-r@v2
+              with:
+                  r-version: ${{ matrix.r-version }}
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@v2
+              with:
+                  working-directory: r
+                  extra-packages: any::rcmdcheck, any::lintr, any::roxygen2
+                  needs: check
+            - name: Roxygen is current
+              working-directory: r
+              run: |
+                  Rscript -e 'roxygen2::roxygenise()'
+                  git diff --exit-code -- NAMESPACE man
+            - name: Lint
+              working-directory: r
+              run: Rscript -e 'lints <- lintr::lint_package(); print(lints); if (length(lints) > 0) quit(status = 1)'
+            - uses: r-lib/actions/check-r-package@v2
+              with:
+                  working-directory: r
+                  args: 'c("--as-cran", "--no-manual")'
+                  error-on: '"warning"'
+                  upload-snapshots: true
+
+    security:
+        name: Trivy + Sonar
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+            - name: Run Trivy vulnerability scanner in fs mode
+              uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  trivy-config: trivy.yaml
+            - name: Run Trivy license scanner
+              uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  scanners: 'license'
+                  severity: 'HIGH,CRITICAL'
+                  exit-code: '1'
+                  trivyignores: '.trivyignore.yaml'
+            - name: Run SonarQube SAST Scan
+              if: ${{ env.SONAR_TOKEN != '' }}
+              uses: SonarSource/sonarqube-scan-action@v6
+              env:
+                  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+                  SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    docker-smoke:
+        name: Docker smoke (python:3.12-slim, r-base)
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: [python, r]
+        steps:
+            - uses: actions/checkout@v6
+            - name: Build and run the smoke profile
+              run: docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-python smoke-python fake
+            - name: Run the R smoke
+              run: docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-r smoke-r fake
+            - name: Tear down
+              if: always()
+              run: docker compose -f docker/compose.smoke.yml down -v

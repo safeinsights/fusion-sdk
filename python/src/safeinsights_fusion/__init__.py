@@ -40,6 +40,7 @@ from .errors import (
     TerminalError,
 )
 from .guards import Guards, OperationSpec
+from .simulate import SimFaults, Simulator, simulate
 from .source import Context, OperationRegistry, operations, serve
 
 __version__ = "0.1.0"
@@ -74,9 +75,12 @@ __all__ = [
     "RoundTimeoutError",
     "SessionError",
     "Settings",
+    "SimFaults",
+    "Simulator",
     "Table",
     "TerminalError",
     "__version__",
     "operations",
     "serve",
+    "simulate",
 ]

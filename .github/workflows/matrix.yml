@@ -32,6 +32,8 @@ jobs:
               run: python3 tools/matrix.py --fixtures --py-installed
             - name: Matrix (happy) + hub with mixed sources
               run: python3 tools/matrix.py --py-installed --rounds 2
+            - name: Examples under the simulator and against the fake
+              run: python3 tools/run_examples.py --py-installed
             - name: Matrix (fault scenarios)
               run: |
                   for s in backpressure transient-errors timeout-reissue restart-404 redeliver-after-ack; do

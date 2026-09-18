@@ -1,0 +1,10 @@
+url: https://safeinsights.github.io/fusion-sdk/
+template:
+  bootstrap: 5
+reference:
+  - title: Destination
+    contents: [fusion_connect, fusion_peer, fusion_peers, fusion_request, fusion_budget, fusion_complete, fusion_as_data_frame]
+  - title: Source
+    contents: [fusion_operations, fusion_operation, fusion_serve, fusion_table]
+  - title: Simulator and tools
+    contents: [fusion_simulate, fusion_sim_faults, fusion_doctor, fusion_settings, fusion_log_sink, fusion_is_terminal]

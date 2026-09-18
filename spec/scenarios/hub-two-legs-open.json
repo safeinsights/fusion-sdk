@@ -1,0 +1,1 @@
+{"id":"hub-two-legs-open","description":"Two legs, no caps: the examples hub run.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"},{"legId":"leg-b","peerOrgSlug":"dp-b"}],"longpollMs":300}

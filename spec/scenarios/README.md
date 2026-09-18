@@ -42,6 +42,7 @@ Rounds are numbered from 1 **per leg**, counting `POST /v1/request` submissions 
 | `guards.json` | `guards` on `/v1/info`; the test's params breach them → `GUARD_REFUSED` |
 | `operations-declared.json` | `operations` on `/v1/info` for the registration pre-flight |
 | `hub-two-legs.json` | two legs; leg B has `maxRounds: 1` so B goes `LIMIT_EXCEEDED` while A continues; `complete()` fan-out |
+| `hub-two-legs-open.json` | two legs, no caps; the `examples/hub` run |
 | `hub-three-legs.json` | three legs, no faults; peers keyed by `peerOrgSlug` |
 
 Handler-side behaviors (handler raises, unknown operation, bad params, `STUDY_COMPLETE`) need no fault: the tests drive them from the source handler set and `complete()`.

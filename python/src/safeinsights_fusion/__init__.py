@@ -39,6 +39,8 @@ from .errors import (
     SessionError,
     TerminalError,
 )
+from .guards import Guards, OperationSpec
+from .source import Context, OperationRegistry, operations, serve
 
 __version__ = "0.1.0"
 
@@ -55,11 +57,15 @@ __all__ = [
     "Column",
     "ConcurrencyError",
     "ConfigError",
+    "Context",
     "EnvelopeError",
     "Fusion",
     "FusionError",
+    "Guards",
     "LimitExceededError",
     "NotReadyError",
+    "OperationRegistry",
+    "OperationSpec",
     "Peer",
     "PeerInfo",
     "ProtocolError",
@@ -71,4 +77,6 @@ __all__ = [
     "Table",
     "TerminalError",
     "__version__",
+    "operations",
+    "serve",
 ]

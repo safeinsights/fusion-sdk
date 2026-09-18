@@ -1,6 +1,6 @@
 #!/bin/sh
 # Smoke: the package installed from source imports, and the fake tunnel's /v1/info is reachable.
-# Phase 2/4 add the SDK's own `doctor` here.
+# Then the SDK's own doctor waits for CHANNEL_UP.
 set -eu
 python - <<'PY'
 import os, sys, time, urllib.request
@@ -16,3 +16,4 @@ for attempt in range(30):
 else:
     sys.exit("fake tunnel never became reachable")
 PY
+python -m safeinsights_fusion doctor --wait

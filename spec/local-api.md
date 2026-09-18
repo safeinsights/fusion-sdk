@@ -1,6 +1,6 @@
 # Local API mirror
 
-The SDK's mirror of the Fusion Tunnel App's research-container-facing API (Architecture Doc v2 §4.1; tunnel plan Phase 2, 5, 8). **The tunnel repo's `src/schemas/local-api.ts` is canonical**; this file records what the SDK relies on and marks the proposals (asks T1–T6, `docs/asks/`) that are not yet in the tunnel plan. `tools/fake_tunnel_pair` implements exactly this document, and Phase 8 diffs it against a JSON-Schema export of the zod schemas.
+The SDK's mirror of the Fusion Tunnel App's research-container-facing API (Architecture Doc v2 §4.1; tunnel plan Phase 2, 5, 8). **The tunnel repo's `src/schemas/local-api.ts` is canonical**; this file records what the SDK relies on and marks the proposals (asks T1–T7, `docs/asks/`) that are not yet in the tunnel plan. `tools/fake_tunnel_pair` implements exactly this document, and Phase 8 diffs it against a JSON-Schema export of the zod schemas.
 
 ## Conventions
 
@@ -52,6 +52,17 @@ Submit a query. Returns immediately.
 | `200` | terminal body | leg ended |
 
 A re-issue (`correlationId` present) whose id the tunnel does not know (the tunnel restarted) is accepted as a new outbox entry **with that id**; the source tunnel dedups by `correlationId` and replays its cached response if it has one.
+
+## `DELETE /v1/request/{correlationId}` — destination only (**T7**)
+
+Abandon a round the SDK has given up on (`RoundTimeoutError` after the last re-issue). The tunnel drops the in-flight entry so the next `POST /v1/request` is accepted, and silently ACKs and discards a response for that id if one arrives later.
+
+| Status | Meaning |
+| :-- | :-- |
+| `204` | abandoned (idempotent; also for an id the tunnel does not know) |
+| `403` / `503` / `200` terminal | as above |
+
+Without T7 the SDK falls back to draining on `409`: it polls the abandoned id once, ACKs whatever arrived, and retries the submit; if nothing has arrived it raises `ConcurrencyError`.
 
 ## `GET /v1/responses/{correlationId}` — destination only, long-poll
 

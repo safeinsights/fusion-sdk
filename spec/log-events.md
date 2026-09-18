@@ -8,7 +8,7 @@ Architecture Doc v2 §12: logging is **event-level, never content-level**. Both 
 
 ## Allowed fields
 
-`peer`, `legId`, `role`, `operation`, `correlationId`, `messageId`, `bytes`, `durationMs`, `attempt`, `reissue`, `state`, `code`, `guard`, `limit`, `observed` (distinct-ID count only), `roundsUsed`, `roundsMax`, `responseBytesUsed`, `responseBytesMax`, `queryBytesUsed`, `queryBytesMax`, `endpointCount`, `level`.
+`peer`, `legId`, `role`, `operation`, `correlationId`, `messageId`, `bytes`, `durationMs`, `attempt`, `reissue`, `state`, `code`, `guard`, `limit`, `observed` (distinct-ID count only), `roundsUsed`, `roundsMax`, `responseBytesUsed`, `responseBytesMax`, `queryBytesUsed`, `queryBytesMax`, `endpointCount`, `apiVersion`, `cap`, `label`, `level`.
 
 ## Vocabulary
 
@@ -38,6 +38,7 @@ Architecture Doc v2 §12: logging is **event-level, never content-level**. Both 
 | `round.served` | INFO | src | `peer`, `correlationId`, `operation`, `bytes`, `durationMs`, `roundsUsed`, `roundsMax` |
 | `envelope.large` | WARNING | both | `peer`, `bytes`, `limit` |
 | `ack.unknown` | WARNING | both | `peer`, `messageId` |
+| `ack.failed` | WARNING | both | `peer`, `messageId` | the ACK could not be delivered after bounded retries; the message may be redelivered |
 | `budget.near_limit` | WARNING | both | `peer`, one `*Used`/`*Max` pair | emitted when any counter passes 90 % |
 | `session.complete` | INFO | src | `peer`, `roundsUsed` |
 | `session.terminal` | ERROR | both | `peer`, `code` |

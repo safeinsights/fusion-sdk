@@ -37,8 +37,10 @@ extend-exclude = [".venv", "r", "*.md"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "T20", "S"]
 ignore = [
     "E501",     # line length is the formatter's job; long string literals are allowed
-    "PLR0911",  # return-count and positional-arg limits are noise for validators and HTTP handlers
+    "PLR0911",  # return/branch/positional-arg counts are noise for decoders, validators and HTTP handlers
+    "PLR0912",
     "PLR0917",
+    "PLC0415",  # lazy imports of optional dependencies (pandas) are deliberate
     "PLR0913",  # many arguments on public constructors is deliberate here
     "PLR2004",  # magic-value comparisons: HTTP status codes read better inline
     "S101",     # asserts are used in tests and the fake

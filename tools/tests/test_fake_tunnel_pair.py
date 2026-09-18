@@ -284,6 +284,28 @@ def test_complete_is_study_complete_for_the_source(happy: tuple[FakeTunnelPair, 
     assert dst.call("POST", "/v1/request", {"payload": QUERY})[1]["code"] == "STUDY_COMPLETE"
 
 
+def test_abandon_round_t7(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
+    _, dst, src = happy
+    cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
+    assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 409
+    assert dst.call("DELETE", f"/v1/request/{cid}")[0] == 204
+    assert dst.call("DELETE", f"/v1/request/{cid}")[0] == 204  # idempotent
+    assert dst.call("DELETE", "/v1/request/unknown")[0] == 204
+    assert src.call("DELETE", f"/v1/request/{cid}")[0] == 403
+    # The next round is accepted; the late response to the abandoned one is swallowed.
+    cid2 = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
+    m1 = src.call("GET", "/v1/messages/next")[1]
+    assert m1["correlationId"] == cid
+    src.call("POST", f"/v1/messages/{m1['messageId']}/ack")
+    assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 202
+    assert dst.call("GET", f"/v1/responses/{cid}")[0] == 404
+    m2 = src.call("GET", "/v1/messages/next")[1]
+    assert m2["correlationId"] == cid2
+    src.call("POST", f"/v1/messages/{m2['messageId']}/ack")
+    src.call("POST", "/v1/messages", {"inReplyTo": cid2, "payload": REPLY})
+    assert dst.call("GET", f"/v1/responses/{cid2}")[1]["correlationId"] == cid2
+
+
 def test_source_validation_and_ack_404(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
     assert src.call("POST", "/v1/messages", {"inReplyTo": "nope", "payload": REPLY})[0] == 400

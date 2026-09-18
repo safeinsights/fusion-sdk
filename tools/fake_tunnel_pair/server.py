@@ -85,6 +85,7 @@ class Round:
     response_dropped: bool = False
     response_delivered_count: int = 0
     response_acked: bool = False
+    abandoned: bool = False
 
     @property
     def has_response(self) -> bool:
@@ -112,9 +113,12 @@ class Round:
 class Leg:
     """All state for one leg: destination tunnel + relay + source tunnel."""
 
-    def __init__(self, spec: LegSpec, scenario: Scenario, fixed_tokens: bool = False) -> None:
+    def __init__(
+        self, spec: LegSpec, scenario: Scenario, fixed_tokens: bool = False, api_version: str = API_VERSION
+    ) -> None:
         self.spec = spec
         self.scenario = scenario
+        self.api_version = api_version
         self.cond = threading.Condition()
         self.started_at = time.monotonic()
         self.ready_at = self.started_at + scenario.ready_delay_ms / 1000.0
@@ -182,7 +186,7 @@ class Leg:
 
     def info(self, role: str) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "apiVersion": API_VERSION,
+            "apiVersion": self.api_version,
             "legId": self.spec.leg_id,
             "peerOrgSlug": self.spec.peer_org_slug,
             "role": role,
@@ -303,7 +307,7 @@ class Leg:
             if self.closing or self.closed:
                 return 200, Terminal("STUDY_COMPLETE").body()
             # Re-issue (T1).
-            if cid is not None and cid in self.rounds:
+            if cid is not None and cid in self.rounds and not self.rounds[cid].abandoned:
                 rnd = self.rounds[cid]
                 if self.in_flight is not None and self.in_flight is not rnd:
                     return 409, {"code": "IN_FLIGHT_CONFLICT", "correlationId": self.in_flight.correlation_id}
@@ -350,7 +354,7 @@ class Leg:
         deadline = time.monotonic() + hold_s
         with self.cond:
             rnd = self.rounds.get(cid)
-            if rnd is None or not rnd.dst_knows:
+            if rnd is None or not rnd.dst_knows or rnd.abandoned:
                 return 404, {"code": "UNKNOWN_CORRELATION", "correlationId": cid}
             if rnd.round_no in self.spec.faults.forget_correlation_rounds and not rnd.forgotten_once:
                 rnd.forgotten_once = True
@@ -385,6 +389,20 @@ class Leg:
                         self.cond.notify_all()
                     return 204, None
             return 404, {"code": "UNKNOWN_MESSAGE", "messageId": message_id}
+
+    def dst_abandon(self, cid: str) -> tuple[int, JSON]:
+        """Ask T7: drop the in-flight entry; a late response is auto-ACKed and discarded."""
+        with self.cond:
+            rnd = self.rounds.get(cid)
+            if rnd is not None:
+                rnd.abandoned = True
+                if self.in_flight is rnd:
+                    self.in_flight = None
+                if rnd.has_response:
+                    rnd.response_acked = True
+                self._event("abandon", correlationId=cid)
+                self.cond.notify_all()
+            return 204, None
 
     def dst_complete(self) -> tuple[int, JSON]:
         with self.cond:
@@ -503,6 +521,8 @@ class Leg:
             rnd.response_message_id = uuid.uuid4().hex
             rnd.response_received_at = _now_iso()
             rnd.response_dropped = rnd.round_no in self.spec.faults.drop_response_rounds
+            if rnd.abandoned:
+                rnd.response_acked = True
             self.response_bytes_used += nbytes
             self.rounds_used += 1
             self.round_times.append(time.monotonic())
@@ -602,6 +622,18 @@ def _make_handler(leg: Leg, role: str, verbose: bool) -> type[BaseHTTPRequestHan
                 return
             self._send(404, {"code": "NOT_FOUND"})
 
+        def do_DELETE(self) -> None:
+            path = self.path.split("?", 1)[0]
+            if self._gate(path):
+                return
+            if path.startswith("/v1/request/"):
+                if role != "destination":
+                    self._forbidden()
+                    return
+                self._send(*leg.dst_abandon(path[len("/v1/request/") :]))
+                return
+            self._send(404, {"code": "NOT_FOUND"})
+
         def do_POST(self) -> None:
             path = self.path.split("?", 1)[0]
             if self._gate(path):
@@ -672,8 +704,10 @@ class FakeTunnelPair:
         fixed_tokens: bool = False,
         verbose: bool = False,
         advertise_host: str | None = None,
+        api_version: str = API_VERSION,
     ) -> None:
         self.scenario = scenario
+        self.api_version = api_version
         self.host = host
         self.port_base = port_base
         self.fixed_tokens = fixed_tokens
@@ -687,7 +721,7 @@ class FakeTunnelPair:
     def start(self) -> list[LegEndpoints]:
         next_port = self.port_base
         for spec in self.scenario.legs:
-            leg = Leg(spec, self.scenario, fixed_tokens=self.fixed_tokens)
+            leg = Leg(spec, self.scenario, fixed_tokens=self.fixed_tokens, api_version=self.api_version)
             self.legs.append(leg)
             urls: dict[str, str] = {}
             for role in ("destination", "source"):

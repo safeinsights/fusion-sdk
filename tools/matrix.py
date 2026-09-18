@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from fake_tunnel_pair import FakeTunnelPair, load_scenario  # noqa: E402
+from fake_tunnel_pair import FakeTunnelPair, LegEndpoints, TunnelEndpoint, load_scenario  # noqa: E402
 
 CONF = ROOT / "tools" / "conformance"
 LANGS = ("py", "r")
@@ -65,6 +65,39 @@ class Cell:
     detail: str = ""
 
 
+class AnnouncedTunnels:
+    """Tunnels provided from outside (the real tunnel harness, Phase 8) in the fake pair's announce format."""
+
+    def __init__(self, announce: dict[str, object]) -> None:
+        legs = announce["legs"]
+        assert isinstance(legs, list)
+        self.endpoints = [
+            LegEndpoints(
+                leg_id=str(leg["legId"]),
+                peer_org_slug=str(leg["peerOrgSlug"]),
+                destination=TunnelEndpoint(str(leg["destination"]["endpoint"]), str(leg["destination"]["token"])),
+                source=TunnelEndpoint(str(leg["source"]["endpoint"]), str(leg["source"]["token"])),
+            )
+            for leg in legs
+        ]
+
+    def env(self, role: str) -> dict[str, str]:
+        if len(self.endpoints) == 1:
+            ep = getattr(self.endpoints[0], role)
+            return {"FUSION_ROLE": role, "FUSION_TUNNEL_ENDPOINT": ep.endpoint, "FUSION_TUNNEL_TOKEN": ep.token}
+        return {
+            "FUSION_ROLE": role,
+            "FUSION_TUNNEL_ENDPOINTS": json.dumps({e.leg_id: getattr(e, role).endpoint for e in self.endpoints}),
+            "FUSION_TUNNEL_TOKENS": json.dumps({e.leg_id: getattr(e, role).token for e in self.endpoints}),
+        }
+
+    def __enter__(self) -> AnnouncedTunnels:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
 def run(
     tc: Toolchain,
     dest_lang: str,
@@ -75,20 +108,35 @@ def run(
     rounds: int,
     timeout: float,
     longpoll_ms: int,
+    announce: dict[str, object] | None = None,
 ) -> Cell:
-    sc = replace(load_scenario(scenario_name), longpoll_ms=longpoll_ms)
-    if len(sc.legs) != len(src_langs):
-        raise SystemExit(f"scenario {scenario_name} has {len(sc.legs)} legs; {len(src_langs)} source languages given")
-    name = f"{dest_lang}->{'+'.join(src_langs)} [{scenario_name}/{mode}]"
+    tunnels: FakeTunnelPair | AnnouncedTunnels
+    if announce is None:
+        sc = replace(load_scenario(scenario_name), longpoll_ms=longpoll_ms)
+        if len(sc.legs) != len(src_langs):
+            raise SystemExit(
+                f"scenario {scenario_name} has {len(sc.legs)} legs; {len(src_langs)} source languages given"
+            )
+        tunnels = FakeTunnelPair(sc)
+        where = scenario_name
+    else:
+        tunnels = AnnouncedTunnels(announce)
+        if len(tunnels.endpoints) != len(src_langs):
+            raise SystemExit(
+                f"announce describes {len(tunnels.endpoints)} legs; {len(src_langs)} source languages given"
+            )
+        where = "real tunnel"
+    name = f"{dest_lang}->{'+'.join(src_langs)} [{where}/{mode}]"
     t0 = time.monotonic()
+    real = announce is not None
     base = {
-        "FUSION_READY_TIMEOUT_S": "60",
-        "FUSION_POLL_HTTP_TIMEOUT_S": "10",
-        "FUSION_ROUND_TIMEOUT_S": "8",
+        "FUSION_READY_TIMEOUT_S": "900" if real else "60",
+        "FUSION_POLL_HTTP_TIMEOUT_S": "40" if real else "10",
+        "FUSION_ROUND_TIMEOUT_S": "60" if real else "8",
         "FUSION_ROUND_MAX_REISSUES": "2",
         "FUSION_LOG_LEVEL": "INFO",
     }
-    with FakeTunnelPair(sc) as pair:
+    with tunnels as pair:
         sources: list[subprocess.Popen[str]] = []
         for i, lang in enumerate(src_langs):
             ep = pair.endpoints[i].source
@@ -126,7 +174,8 @@ def run(
             if proc.stdout is not None:
                 src_out += proc.stdout.read()
     ok = dest_exit == 0 and (
-        (mode == "hub" and src_exits[0] == 0 and src_exits[1] != 0) or (mode != "hub" and all(e == 0 for e in src_exits))
+        (mode == "hub" and src_exits[0] == 0 and src_exits[1] != 0)
+        or (mode != "hub" and all(e == 0 for e in src_exits))
     )
     if mode == "chaos":
         ok = dest_exit in (0, 3) and all(e is not None for e in src_exits)
@@ -218,7 +267,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rscript", default="Rscript")
     ap.add_argument("--r-src", default=None, help="load the R package from this source dir (dev)")
     ap.add_argument("--py-installed", action="store_true", help="use the installed safeinsights_fusion, not python/src")
+    ap.add_argument(
+        "--announce",
+        default=None,
+        help="Phase 8: JSON (fake announce format) describing REAL tunnels to use instead of the fake",
+    )
     args = ap.parse_args(argv)
+    announce = json.loads(Path(args.announce).read_text(encoding="utf-8")) if args.announce else None
+    if announce is not None and (args.fixtures or args.hub_only or not args.pairs or len(args.pairs) != 1):
+        # A real tunnel pair serves exactly one study: complete() closes it, so one cell per announce file.
+        ap.error(
+            "--announce runs exactly one cell: pass a single --pairs d-s (e.g. --pairs py-r) and no --fixtures/--hub-only"
+        )
     tc = Toolchain(args.python, args.rscript, args.r_src, not args.py_installed)
     cells: list[Cell] = []
     if args.fixtures:
@@ -238,10 +298,11 @@ def main(argv: list[str] | None = None) -> int:
                         rounds=args.rounds,
                         timeout=args.timeout,
                         longpoll_ms=args.longpoll_ms,
+                        announce=announce,
                     )
                 )
                 print(fmt(cells[-1]), flush=True)
-        if not args.no_hub and not args.chaos:
+        if not args.no_hub and not args.chaos and announce is None:
             for d in LANGS:
                 cells.append(
                     run(

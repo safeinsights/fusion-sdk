@@ -16,3 +16,12 @@ Issue drafts for the owning repositories (plan §4). Each file is ready to paste
 | B1 | management-app | `B1-starter-code-and-simulator.md` | draft |
 
 The executable form of T1–T7 is `tools/fake_tunnel_pair`; `spec/local-api.md` is the prose form.
+
+## Phase 8 handoff to fusion-tunnel-app
+
+- `tools/conformance/{dest,source}.{py,R}` are ready to replace `testing/rc-client.ts` as the research-container
+  drivers of the tunnel's Phase 9 harness: point `tools/matrix.py --announce <file>` at real tunnels described in
+  the fake pair's announce format, or set `FUSION_TEST_ANNOUNCE` for the SDK test suites (`python/tests/test_real_tunnel.py`,
+  `r/tests/testthat/test-real-tunnel.R`).
+- Export the zod schemas of `src/schemas/local-api.ts` to JSON Schema in the shape documented in `tools/contract_diff.py`
+  and commit it here as `spec/local-api.export.json`; `checks.yml` then diffs it against `spec/local-api.requirements.json`.

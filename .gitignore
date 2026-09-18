@@ -40,3 +40,7 @@ sbom/*.json
 # Test results
 test-results/
 tmp/
+
+# testthat 3.3 failure snapshots
+r/tests/testthat/_problems/
+r/tests/testthat/testthat-problems.rds

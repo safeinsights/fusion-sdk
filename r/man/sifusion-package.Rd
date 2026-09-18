@@ -7,9 +7,9 @@
 \title{sifusion: SafeInsights Fusion SDK}
 \description{
 Researcher-facing client for the SafeInsights Enclave Fusion Framework.
-Destination code calls \code{fusion_connect()} then \code{fusion_request()} on a peer
-handle; source code registers operation handlers with \code{fusion_operations()}
-and runs \code{fusion_serve()}. Researcher code never touches the transport.
+Destination code calls \code{\link[=fusion_connect]{fusion_connect()}} then \code{\link[=fusion_request]{fusion_request()}} on a peer
+handle; source code registers operation handlers with \code{\link[=fusion_operations]{fusion_operations()}}
+and runs \code{\link[=fusion_serve]{fusion_serve()}}. Researcher code never touches the transport.
 }
 \details{
 The package mirrors the Python package \code{safeinsights_fusion} behavior for

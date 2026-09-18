@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--longpoll-ms", type=int, default=None, help="override the scenario's long-poll hold")
     p.add_argument("--ready-delay-ms", type=int, default=None, help="override the scenario's readiness delay")
     p.add_argument("--fixed-tokens", action="store_true", help="tokens fake-<legId>-<role> (test/smoke only)")
+    p.add_argument("--api-version", default="1.0.0", help="apiVersion reported on /v1/info (test knob)")
     p.add_argument("--announce", type=Path, default=None, help="also write the announce JSON to this file")
     p.add_argument("--no-stdin-watch", action="store_true", help="do not exit on stdin EOF")
     p.add_argument("--verbose", action="store_true", help="log every HTTP request to stderr")
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         fixed_tokens=args.fixed_tokens,
         verbose=args.verbose,
         advertise_host=args.advertise_host,
+        api_version=args.api_version,
     )
     pair.start()
     announce = pair.announce()

@@ -1,0 +1,17 @@
+test_that("log lines are content-free and the vocabulary is closed", {
+  sifusion:::fusion_log_configure("DEBUG")
+  lines <- capture_fusion_log({
+    sifusion:::fusion_log("round.start", "INFO", peer = "dp-a", operation = "op", bytes = 12L)
+    sifusion:::fusion_log("round.retry", "DEBUG", peer = "dp-a", attempt = 0L, code = "NOT_READY")
+    sifusion:::fusion_log("complete.leg", "INFO", peer = "dp a", code = "OK", operations = c("a", "b"), state = NULL)
+  })
+  expect_equal(lines[1], "fusion round.start peer=dp-a operation=op bytes=12")
+  expect_equal(lines[2], "fusion round.retry peer=dp-a attempt=0 code=NOT_READY")
+  expect_equal(lines[3], "fusion complete.leg peer=\"dp a\" code=OK operations=a,b")
+  expect_error(sifusion:::fusion_log("round.start", "INFO", params = list(secret = 1)), "content-free")
+  sifusion:::fusion_log_configure("WARNING")
+  quiet <- capture_fusion_log(sifusion:::fusion_log("round.start", "INFO", peer = "x"))
+  expect_length(quiet, 0)
+  sifusion:::fusion_log_configure("INFO")
+  expect_message(sifusion:::fusion_log("round.start", "INFO", peer = "x"), "^fusion round.start peer=x")
+})

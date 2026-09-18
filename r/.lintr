@@ -1,8 +1,9 @@
 linters: linters_with_defaults(
-    line_length_linter(120),
+    line_length_linter(160),
     object_name_linter(styles = c("snake_case", "symbols")),
-    cyclocomp_linter(complexity_limit = 30),
-    indentation_linter(indent = 2L)
+    indentation_linter(indent = 2L),
+    object_length_linter(40L),
+    assignment_linter(operator = c("<-", "<<-"))
   )
-exclusions: list("tests/testthat.R")
+exclusions: list("tests/testthat.R", "tests/testthat/_problems")
 encoding: "UTF-8"

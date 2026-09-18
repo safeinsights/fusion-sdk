@@ -3,19 +3,21 @@
 #
 #   Rscript r/vendor.R <out-dir>
 #
-# The drop contains every R/*.R file plus `sifusion.R`, a loader that sources them into an
-# environment named `sifusion` and attaches it, so researcher code can call
-# `sifusion::fusion_connect()`-style functions as `fusion_connect()` after `source("sifusion.R")`.
-# Only `curl` and `jsonlite` must be installed in the image.
+# The drop is `sifusion.R` (a loader) plus a `sifusion/` directory holding every R/*.R file. The
+# loader sources them into an environment named `sifusion` and attaches it, so researcher code can
+# call `sifusion::fusion_connect()`-style functions as `fusion_connect()` after `source("sifusion.R")`.
+# The package files live in their own directory so they never collide with researcher files of the
+# same name (the SDK has a `source.R`; so does many a study). Only `curl` and `jsonlite` are needed.
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("usage: Rscript r/vendor.R <out-dir>")
 out <- args[[1]]
 pkg <- normalizePath(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)[1])), "."), mustWork = TRUE)
 r_dir <- file.path(pkg, "R")
-dir.create(out, recursive = TRUE, showWarnings = FALSE)
+pkg_out <- file.path(out, "sifusion")
+dir.create(pkg_out, recursive = TRUE, showWarnings = FALSE)
 files <- sort(list.files(r_dir, pattern = "\\.R$", full.names = TRUE))
-for (f in files) file.copy(f, file.path(out, basename(f)), overwrite = TRUE)
+for (f in files) file.copy(f, file.path(pkg_out, basename(f)), overwrite = TRUE)
 desc <- read.dcf(file.path(pkg, "DESCRIPTION"))
 version <- desc[1, "Version"]
 loader <- c(
@@ -24,7 +26,7 @@ loader <- c(
   "local({",
   "  here <- dirname(normalizePath(sys.frame(1)$ofile %||% (function() { f <- grep('--file=', commandArgs(), value = TRUE); if (length(f)) sub('--file=', '', f[1]) else 'sifusion.R' })(), mustWork = FALSE))",
   "  env <- new.env(parent = globalenv())",
-  sprintf("  for (f in c(%s)) sys.source(file.path(here, f), envir = env)", paste(sprintf("\"%s\"", basename(files)), collapse = ", ")),
+  sprintf("  for (f in c(%s)) sys.source(file.path(here, \"sifusion\", f), envir = env)", paste(sprintf("\"%s\"", basename(files)), collapse = ", ")),
   sprintf("  env$.sifusion_vendored_version <- \"%s\"", version),
   "  env$.fusion_log$level <- 20L",
   "  if ('sifusion' %in% search()) detach('sifusion', character.only = TRUE)",
@@ -35,4 +37,4 @@ loader <- c(
 # `%||%` must exist before the block runs: put it first.
 loader <- c(loader[1:2], "`%||%` <- function(a, b) if (is.null(a)) b else a", loader[3:(length(loader) - 1)])
 writeLines(loader, file.path(out, "sifusion.R"))
-cat(sprintf("vendored sifusion %s: %d files into %s\n", version, length(files) + 1, out))
+cat(sprintf("vendored sifusion %s: sifusion.R + %d files in sifusion/ into %s\n", version, length(files), out))

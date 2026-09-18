@@ -5,7 +5,8 @@ test_that("the vendored drop loads with source() and round-trips an envelope", {
   res <- system2(rscript_bin(), c(shQuote(file.path(root, "r", "vendor.R")), shQuote(out)), stdout = TRUE, stderr = TRUE)
   expect_match(paste(res, collapse = "\n"), "vendored sifusion")
   expect_true(file.exists(file.path(out, "sifusion.R")))
-  expect_true(file.exists(file.path(out, "envelope.R")))
+  expect_true(file.exists(file.path(out, "sifusion", "envelope.R")))
+  expect_false(file.exists(file.path(out, "source.R"))) # package files never collide with researcher files
   script <- tempfile(fileext = ".R")
   writeLines(c(
     sprintf('source("%s")', file.path(out, "sifusion.R")),

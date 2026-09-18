@@ -1,0 +1,87 @@
+name: Release
+on:
+    push:
+        tags: ['v*']
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v6
+            - uses: astral-sh/setup-uv@v6
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-r@v2
+              with:
+                  r-version: 'release'
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@v2
+              with:
+                  working-directory: r
+            - name: Versions must match the tag
+              run: |
+                  tag="${GITHUB_REF_NAME#v}"
+                  py="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' python/src/safeinsights_fusion/__init__.py)"
+                  r="$(sed -n 's/^Version: //p' r/DESCRIPTION)"
+                  echo "tag=$tag python=$py r=$r"
+                  [ "$tag" = "$py" ] && [ "$tag" = "$r" ]
+            - name: Build Python sdist and wheel
+              run: uv build --project python --out-dir dist
+            - name: Build R source package
+              run: R CMD build r && mv sifusion_*.tar.gz dist/
+            - name: SBOM (CycloneDX)
+              uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  format: 'cyclonedx'
+                  output: 'dist/fusion-sdk-sbom.cdx.json'
+            - name: License gate
+              uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  scanners: 'license'
+                  severity: 'HIGH,CRITICAL'
+                  exit-code: '1'
+                  trivyignores: '.trivyignore.yaml'
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: dist
+                  path: dist/
+
+    publish-pypi:
+        needs: build
+        runs-on: ubuntu-latest
+        environment: pypi
+        permissions:
+            id-token: write # trusted publishing
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  name: dist
+                  path: dist
+            - name: Keep only the Python artifacts
+              run: mkdir py && mv dist/*.whl dist/*.tar.gz py/ && rm -f py/sifusion_*.tar.gz
+            - uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                  packages-dir: py/
+
+    github-release:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  name: dist
+                  path: dist
+            - uses: softprops/action-gh-release@v2
+              with:
+                  files: dist/*
+                  generate_release_notes: true

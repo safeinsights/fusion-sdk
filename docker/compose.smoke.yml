@@ -36,3 +36,19 @@ services:
             FUSION_TUNNEL_ENDPOINT: http://fake:8472
             FUSION_TUNNEL_TOKEN: fake-leg-a-source
             FUSION_READY_TIMEOUT_S: '60'
+
+    # Same smoke on the ECR Public mirror of r-base, for images that must not pull from Docker Hub.
+    smoke-r-ecr:
+        build:
+            context: ..
+            dockerfile: docker/r.Dockerfile
+            args:
+                R_BASE_IMAGE: public.ecr.aws/docker/library/r-base:latest
+        depends_on: [fake]
+        read_only: true
+        tmpfs: [/tmp]
+        environment:
+            FUSION_ROLE: source
+            FUSION_TUNNEL_ENDPOINT: http://fake:8472
+            FUSION_TUNNEL_TOKEN: fake-leg-a-source
+            FUSION_READY_TIMEOUT_S: '60'

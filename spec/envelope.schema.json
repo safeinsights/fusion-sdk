@@ -29,7 +29,10 @@
         "v": { "$ref": "#/$defs/version" },
         "kind": { "const": "query" },
         "operation": { "$ref": "#/$defs/operationName" },
-        "params": { "type": "object" },
+        "params": {
+          "type": "object",
+          "description": "Operation parameters. The member a source registers as its Person-ID parameter must be absent, one scalar, or a flat array of scalars; the source refuses other shapes with GUARD_REFUSED when maxDistinctPersonIds is enforced (ADR 0002)."
+        },
         "encoding": { "$ref": "#/$defs/encoding" }
       },
       "required": ["v", "kind", "operation", "params"],

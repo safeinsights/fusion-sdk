@@ -64,11 +64,33 @@ distinct_count <- function(values) {
   1L
 }
 
+# The Person-ID parameter must be absent, one scalar, or a flat array of scalars. Objects and nested
+# arrays count as one value in distinct_count() but unlist() flattens them, which would let a
+# destination bypass maxDistinctPersonIds.
+person_id_shape_ok <- function(values) {
+  if (is.null(values)) {
+    return(TRUE)
+  }
+  if (is.atomic(values)) {
+    return(length(values) >= 1 && !anyNA(values))
+  }
+  if (is_json_array(values)) {
+    return(all(vapply(values, is_scalar, logical(1))))
+  }
+  FALSE
+}
+
 check_query <- function(params, spec, guards) {
   if (is.null(guards) || is.null(guards$max_distinct_person_ids) || is.null(spec$person_id_param)) {
     return(invisible(NULL))
   }
-  n <- distinct_count(params[[spec$person_id_param]])
+  values <- params[[spec$person_id_param]]
+  if (!person_id_shape_ok(values)) {
+    guard_refused("maxDistinctPersonIds", guards$max_distinct_person_ids,
+      sprintf("'%s' must be a flat array of scalar Person-ID values so they can be counted", spec$person_id_param)
+    )
+  }
+  n <- distinct_count(values)
   if (n > guards$max_distinct_person_ids) {
     guard_refused("maxDistinctPersonIds", guards$max_distinct_person_ids,
       sprintf("query names %d distinct values of '%s'; the limit is %d", n, spec$person_id_param, guards$max_distinct_person_ids),

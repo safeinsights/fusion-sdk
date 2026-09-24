@@ -97,11 +97,35 @@ def _canonical_scalar(v: JSON) -> str:
     return "j:" + json.dumps(v, sort_keys=True, separators=(",", ":"))
 
 
+def _is_scalar(v: JSON) -> bool:
+    return isinstance(v, (str, bool, int, float))
+
+
+def person_id_shape_ok(values: JSON) -> bool:
+    """The Person-ID parameter must be absent, one scalar, or a flat array of scalars.
+
+    Objects and nested arrays count as one value in distinct_count() but many handlers flatten them
+    (iterating a dict yields its keys), which would let a destination bypass maxDistinctPersonIds.
+    """
+    if values is None or _is_scalar(values):
+        return True
+    if isinstance(values, (list, tuple)):
+        return all(_is_scalar(v) for v in values)
+    return False
+
+
 def check_query(params: Mapping[str, Any], spec: OperationSpec, guards: Guards | None) -> None:
     """maxDistinctPersonIds: bound the distinct values of the handler's declared Person-ID parameter."""
     if guards is None or guards.max_distinct_person_ids is None or spec.person_id_param is None:
         return
-    n = distinct_count(params.get(spec.person_id_param))
+    values = params.get(spec.person_id_param)
+    if not person_id_shape_ok(values):
+        raise GuardRefused(
+            "maxDistinctPersonIds",
+            guards.max_distinct_person_ids,
+            f"{spec.person_id_param!r} must be a flat array of scalar Person-ID values so they can be counted",
+        )
+    n = distinct_count(values)
     if n > guards.max_distinct_person_ids:
         raise GuardRefused(
             "maxDistinctPersonIds",
@@ -181,5 +205,6 @@ __all__ = [
     "check_result",
     "distinct_count",
     "find_count_column",
+    "person_id_shape_ok",
     "preflight",
 ]

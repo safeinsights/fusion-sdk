@@ -17,7 +17,9 @@ fusion_operation(
 or a \code{\link[=fusion_table]{fusion_table()}}. \code{params} is the query's named list; \code{ctx} has \code{correlation_id},
 \code{message_id}, \code{peer}, \code{operation}, \code{budget}.}
 
-\item{person_id_param}{Name of the parameter whose distinct values \code{maxDistinctPersonIds} bounds.}
+\item{person_id_param}{Name of the parameter whose distinct values \code{maxDistinctPersonIds} bounds.
+Its value must be absent, one scalar, or a flat array of scalars; other shapes are refused with
+\code{GUARD_REFUSED} before the handler runs.}
 
 \item{cardinality}{One of \code{"aggregate"}, \code{"per-group"}, \code{"per-record"} (the manifest's class).}
 

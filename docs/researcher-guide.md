@@ -62,7 +62,9 @@ fusion_serve(ops)
 
 - Handlers must be **idempotent per `correlationId`** (`docs/idempotent-operations.md`).
 - Declare `person_id_param` and `cardinality` so the source-side guards can be enforced; declare
-  `count_column` when a per-group table has more than one integer column.
+  `count_column` when a per-group table has more than one integer column. The Person-ID parameter
+  must arrive as a flat array of scalars: an object or a nested array is refused as `GUARD_REFUSED`
+  before the handler runs, so the destination should always send `{"person_ids": ["p1", "p2"]}`.
 - A handler exception never crashes the loop; it crosses as `HANDLER_ERROR` with the traceback unless
   the operation is registered with `sanitize`.
 - The source script should do nothing but `serve()` after setup: the loop blocks the process.

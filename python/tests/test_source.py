@@ -248,6 +248,14 @@ def test_guards_refuse_loudly_without_partial_results(fake: FakeFactory, setting
             "observed": 6,
         }
         assert seen == [6], "the handler must not run for a refused query"
+        for shape in ({f"p{i}": f"p{i}" for i in range(6)}, [[f"p{i}" for i in range(6)]]):
+            with pytest.raises(RemoteError) as exc:
+                peer.request("counts_by_group", {"person_ids": shape})
+            assert exc.value.code == "GUARD_REFUSED" and exc.value.detail == {
+                "guard": "maxDistinctPersonIds",
+                "limit": 5,
+            }
+        assert seen == [6], "object and nested-array Person-ID shapes must not reach the handler"
         with pytest.raises(RemoteError) as exc:
             peer.request("counts_by_group", {"person_ids": ["a"], "small": True})
         assert exc.value.detail == {"guard": "minGroupSize", "limit": 3}  # no observed: the small cell stays home
@@ -377,6 +385,13 @@ def test_guard_helpers_directly() -> None:
     )  # 0 means "no limit" after from_info; direct None-equivalent
     with pytest.raises(Exception, match="distinct"):
         check_query({"ids": ["a", "b", "c"]}, spec, Guards(max_distinct_person_ids=2))
+    # Shapes the guard cannot count are refused, not counted as one value (an object's keys or a nested
+    # array's members would reach the handler as N ids).
+    for shape in ({"a": "a", "b": "b", "c": "c"}, [["a", "b", "c"]], ["a", ["b", "c"]], ["a", {"k": "b"}], [None]):
+        with pytest.raises(Exception, match="flat array") as exc:
+            check_query({"ids": shape}, spec, Guards(max_distinct_person_ids=100))
+        assert exc.value.detail() == {"guard": "maxDistinctPersonIds", "limit": 100}
+    check_query({"ids": {"a": 1}}, spec, None)  # not enforced when the guard is disabled
     table = Table.from_columns({"g": ["x"], "n": [3]}).to_json()
     check_result(table, spec, Guards(min_group_size=3))
     with pytest.raises(Exception, match="smaller"):

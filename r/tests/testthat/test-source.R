@@ -65,6 +65,13 @@ ops <- fusion_operations(
     e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = c("a", "b", "c", "d", "e", "f"))), fusion_remote_error = function(e) e)
     expect_equal(e$code, "GUARD_REFUSED")
     expect_equal(e$detail, list(guard = "maxDistinctPersonIds", limit = 5L, observed = 6L))
+    as_object <- as.list(setNames(paste0("p", 1:6), paste0("p", 1:6)))
+    nested <- list(as.list(paste0("p", 1:6)))
+    for (shape in list(as_object, nested)) {
+      e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = shape)), fusion_remote_error = function(e) e)
+      expect_equal(e$code, "GUARD_REFUSED")
+      expect_equal(e$detail, list(guard = "maxDistinctPersonIds", limit = 5L))
+    }
     e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = I("a"), small = TRUE)), fusion_remote_error = function(e) e)
     expect_equal(e$detail, list(guard = "minGroupSize", limit = 3L))
     e <- tryCatch(sifusion::fusion_request(peer, "two_counts"), fusion_remote_error = function(e) e)

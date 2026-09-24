@@ -9,6 +9,8 @@
 #'   or a [fusion_table()]. `params` is the query's named list; `ctx` has `correlation_id`,
 #'   `message_id`, `peer`, `operation`, `budget`.
 #' @param person_id_param Name of the parameter whose distinct values `maxDistinctPersonIds` bounds.
+#'   Its value must be absent, one scalar, or a flat array of scalars; other shapes are refused with
+#'   `GUARD_REFUSED` before the handler runs.
 #' @param cardinality One of `"aggregate"`, `"per-group"`, `"per-record"` (the manifest's class).
 #' @param count_column For `per-group` operations, the result column holding group sizes; inferred
 #'   as the single integer column when omitted.

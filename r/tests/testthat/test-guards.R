@@ -14,6 +14,15 @@ test_that("check_query and check_result", {
   expect_null(sifusion:::check_query(list(ids = list("a", "b", "c")), spec, NULL))
   e <- tryCatch(sifusion:::check_query(list(ids = list("a", "b", "c")), spec, g(max_distinct_person_ids = 2L)), fusion_guard_refused = function(e) e)
   expect_equal(sifusion:::guard_detail(e), list(guard = "maxDistinctPersonIds", limit = 2L, observed = 3L))
+  # Shapes the guard cannot count are refused, not counted as one value (unlist() would hand the handler N ids).
+  for (shape in list(list(a = "a", b = "b", c = "c"), list(list("a", "b", "c")), list("a", list("b", "c")), list("a", list(k = "b")), list(NULL))) {
+    e <- tryCatch(sifusion:::check_query(list(ids = shape), spec, g(max_distinct_person_ids = 100L)), fusion_guard_refused = function(e) e)
+    expect_s3_class(e, "fusion_guard_refused")
+    expect_match(conditionMessage(e), "flat array")
+    expect_equal(sifusion:::guard_detail(e), list(guard = "maxDistinctPersonIds", limit = 100L))
+  }
+  expect_null(sifusion:::check_query(list(ids = c("a", "b")), spec, g(max_distinct_person_ids = 2L)))
+  expect_null(sifusion:::check_query(list(ids = list(a = 1)), spec, NULL)) # not enforced when the guard is disabled
   tbl <- sifusion::fusion_table(data.frame(grp = "x", n = 3L))$json
   expect_null(sifusion:::check_result(tbl, spec, g(min_group_size = 3L)))
   e <- tryCatch(sifusion:::check_result(tbl, spec, g(min_group_size = 4L)), fusion_guard_refused = function(e) e)

@@ -17,6 +17,12 @@ App's local API is tracked in `docs/compatibility.md`.
   and hub study shapes, cross-language conformance matrix and nightly chaos.
 - Vendoring drops (`python/vendor.sh`, `r/vendor.R`) for base images that do not ship the SDK.
 
+### Security
+
+- `maxDistinctPersonIds` refuses a Person-ID parameter that is an object, a nested array or an array
+  with non-scalar members instead of counting it as one value; handlers that flatten such shapes
+  could otherwise be handed an unbounded number of ids in one round.
+
 ### Contract asks pending on the tunnel (spec/local-api.md, docs/asks/)
 
 T1 same-`correlationId` re-issue · T2 budget on the local API · T3 guards/caps/operations on

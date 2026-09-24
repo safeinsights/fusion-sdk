@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "safeinsights-fusion"
-version = "0.1.0"
+version = "0.2.0"
 description = "SafeInsights Fusion SDK: researcher-facing client for the Enclave Fusion Framework (destination request/response and source operation handlers over the Fusion Tunnel App local API)"
 readme = "README.md"
 license = "AGPL-3.0-or-later"

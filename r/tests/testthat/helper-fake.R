@@ -159,7 +159,6 @@ repeat {
   if (is.null(r) || r$status == 204 || r$status == 503) next
   if (r$status != 200) break
   if (isTRUE(r$body$terminal)) break
-  call("POST", paste0("/v1/messages/", r$body$messageId, "/ack"))
   reply <- sprintf(\'{"inReplyTo": "%%s", "payload": %s}\', r$body$correlationId)
   for (i in 1:20) { p <- call("POST", "/v1/messages", reply); if (p$status != 429) break; Sys.sleep(0.05) }
 }

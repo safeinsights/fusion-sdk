@@ -35,7 +35,12 @@ class NotReadyError(FusionError):
 
 
 class ConcurrencyError(FusionError):
-    """A second in-flight request on a peer, or 409 from the tunnel."""
+    """A second in-flight request on a peer, or 409 CONFLICT from the tunnel (`correlation_id` names the
+    in-flight round when the tunnel reported one)."""
+
+    def __init__(self, message: str, *, peer: str | None = None, correlation_id: str | None = None) -> None:
+        super().__init__(message, peer=peer)
+        self.correlation_id = correlation_id
 
 
 class RoundTimeoutError(FusionError):
@@ -85,7 +90,10 @@ class TerminalError(FusionError):
 
 
 class LimitExceededError(TerminalError):
-    """The tunnel reported LIMIT_EXCEEDED on this leg: a source-approved cap was breached."""
+    """The tunnel reported LIMIT_EXCEEDED on this leg: a source-approved cap was breached.
+
+    `cap` is the manifest name of the breached cap (`detail.cap`), e.g. `maxRounds`; `detail` also carries
+    `limit` and `observed`."""
 
     def __init__(self, message: str = "", detail: Mapping[str, Any] | None = None, *, peer: str | None = None) -> None:
         super().__init__("LIMIT_EXCEEDED", message, detail, peer=peer)
@@ -97,7 +105,7 @@ class LimitExceededError(TerminalError):
 
 
 class SessionError(TerminalError):
-    """The tunnel reported SESSION_ERRORED (dead-letter, un-ACKed expiry, relay closed, tunnel ERRORED)."""
+    """The tunnel reported SESSION_ERRORED (the relay closed the session, or the tunnel entered ERRORED)."""
 
     def __init__(
         self,
@@ -111,7 +119,7 @@ class SessionError(TerminalError):
 
 
 class ProtocolError(FusionError):
-    """Undecodable local-API response or envelope (still ACKed), or 422 from the tunnel."""
+    """Undecodable local-API response or envelope, or a request the tunnel rejected (400, 413, 422)."""
 
 
 def terminal_error(

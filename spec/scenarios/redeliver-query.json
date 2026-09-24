@@ -1,0 +1,1 @@
+{"id":"redeliver-query","description":"Query 2 is delivered to the source RC twice.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"redeliverRounds":[2]}}

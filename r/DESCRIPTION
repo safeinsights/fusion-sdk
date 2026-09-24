@@ -1,16 +1,15 @@
 Package: sifusion
 Title: SafeInsights Fusion SDK
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("SafeInsights", role = c("aut", "cre", "cph"), email = "support@safeinsights.org"))
 Description: Researcher-facing client for the SafeInsights Enclave Fusion
     Framework. A destination-side analysis calls fusion_request() on a peer
     handle; a source-side container registers Data-Partner-approved operation
     handlers and calls fusion_serve(). The package drives the per-job Fusion
-    Tunnel App's enclave-local API (submit/poll, two-stage acknowledgement,
-    duplicate suppression, single in-flight round per peer, typed errors,
-    budget hints) and owns the language-neutral fusion envelope shared with
-    the Python package.
+    Tunnel App's enclave-local API (submit/poll, duplicate suppression,
+    single in-flight round per peer, typed errors, budget hints) and owns
+    the language-neutral fusion envelope shared with the Python package.
 License: AGPL (>= 3)
 URL: https://github.com/safeinsights/fusion-sdk
 BugReports: https://github.com/safeinsights/fusion-sdk/issues

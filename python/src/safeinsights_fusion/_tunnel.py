@@ -1,19 +1,83 @@
-"""Typed wrapper of the tunnel's local API (spec/local-api.md) implementing `_transport.Transport`.
+"""The tunnel's local API (spec/local-api.md) over HTTP, implementing `_transport.Transport`.
 
-Status codes are mapped once, here, per spec/errors.json `httpStatusMapping`.
+urllib only: bearer auth, explicit per-call timeouts, JSON both ways, no proxies (the tunnel is a
+sidecar), content-free exceptions. Status codes are mapped once, in `_call`, per spec/errors.json.
 """
 
 from __future__ import annotations
 
-import logging
+import contextlib
+import http.client
+import json
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
-from . import _log
-from ._http import INVALID_JSON, HttpClient, HttpResponse, TransportError
 from ._transport import EMPTY, Budget, Delivered, Empty, Info, Retryable, Terminal, UnknownCorrelation
-from .errors import ConcurrencyError, ConfigError, ProtocolError
+from .errors import ConcurrencyError, ConfigError, FusionError, ProtocolError
 
 JSON = Any
+
+#: Sentinel body for a response whose bytes were not valid JSON.
+INVALID_JSON = object()
+
+
+class TransportError(Exception):
+    """Connection refused/reset, DNS failure, or timeout. Content-free."""
+
+
+@dataclass(frozen=True)
+class HttpResponse:
+    status: int
+    body: JSON  # parsed JSON, None for an empty body, or INVALID_JSON
+
+    @property
+    def terminal(self) -> bool:
+        return isinstance(self.body, dict) and self.body.get("terminal") is True
+
+
+class HttpClient:
+    def __init__(self, endpoint: str, token: str, *, default_timeout_s: float = 10.0) -> None:
+        self.endpoint = endpoint.rstrip("/")
+        self._token = token
+        self.default_timeout_s = default_timeout_s
+        # No proxies: the enclave may export HTTP(S)_PROXY for egress, which must never apply to the sidecar.
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def request(self, method: str, path: str, body: JSON = None, *, timeout_s: float | None = None) -> HttpResponse:
+        data = None if body is None else json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        # S310: the scheme and host were validated in _config (http://, enclave-local only).
+        req = urllib.request.Request(self.endpoint + path, data=data, method=method)  # noqa: S310
+        req.add_header("Authorization", f"Bearer {self._token}")
+        req.add_header("Accept", "application/json")
+        if data is not None:
+            req.add_header("Content-Type", "application/json; charset=utf-8")
+        timeout = self.default_timeout_s if timeout_s is None else timeout_s
+        try:
+            with self._opener.open(req, timeout=timeout) as resp:
+                return HttpResponse(resp.status, _parse(resp.read()))
+        except urllib.error.HTTPError as exc:
+            try:
+                raw = exc.read()
+            except (OSError, http.client.HTTPException):
+                raw = b""
+            return HttpResponse(exc.code, _parse(raw))
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException, OSError) as exc:
+            raise TransportError(type(exc).__name__) from None
+
+
+def _parse(raw: bytes) -> JSON:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"), parse_constant=_reject_constant)
+    except (UnicodeDecodeError, ValueError):
+        return INVALID_JSON
+
+
+def _reject_constant(name: str) -> None:
+    raise ValueError(f"non-finite JSON constant {name}")
 
 
 class TunnelClient:
@@ -33,17 +97,20 @@ class TunnelClient:
             raise ProtocolError(
                 f"{method} {path}: tunnel returned a non-JSON body (status {resp.status})", peer=self.peer
             )
+        code = resp.body.get("code") if isinstance(resp.body, dict) else None
         if resp.status == 401:
             raise ConfigError("bearer token rejected by the tunnel (401)", peer=self.peer)
         if resp.status == 403:
             raise ConfigError(f"{method} {path} is not allowed for this role (403): check FUSION_ROLE", peer=self.peer)
         if resp.status == 409:
             cid = resp.body.get("correlationId") if isinstance(resp.body, dict) else None
-            err = ConcurrencyError("another round is in flight at the tunnel (409)", peer=self.peer)
-            err.correlation_id = cid  # type: ignore[attr-defined]
-            raise err
-        if resp.status == 422:
-            raise ProtocolError(f"{method} {path}: tunnel rejected the request schema (422)", peer=self.peer)
+            raise ConcurrencyError(
+                f"{method} {path}: 409 CONFLICT (another round is in flight, or the round is unknown)",
+                peer=self.peer,
+                correlation_id=cid if isinstance(cid, str) else None,
+            )
+        if resp.status in (400, 413, 422):
+            raise ProtocolError(f"{method} {path}: tunnel rejected the request ({resp.status} {code})", peer=self.peer)
         if resp.status == 429:
             raise Retryable("BACKPRESSURE")
         if resp.status == 503:
@@ -114,7 +181,7 @@ class TunnelClient:
         if t is not None:
             return t
         cid = resp.body.get("correlationId") if isinstance(resp.body, dict) else None
-        if resp.status not in (200, 202) or not isinstance(cid, str):
+        if resp.status != 202 or not isinstance(cid, str):
             raise ProtocolError(
                 f"POST /v1/request returned status {resp.status} without a correlationId", peer=self.peer
             )
@@ -134,13 +201,10 @@ class TunnelClient:
             raise ProtocolError(f"GET {path} returned status {resp.status}", peer=self.peer)
         return self._delivered(resp, path)
 
-    def abandon(self, correlation_id: str) -> bool:
-        """Ask T7. Returns False when the tunnel does not implement it."""
-        try:
-            resp = self._call("DELETE", f"/v1/request/{correlation_id}")
-        except Retryable:
-            return False
-        return resp.status in (200, 202, 204)
+    def abandon(self, correlation_id: str) -> None:
+        """Best effort: one DELETE, any failure ignored (the round is already lost to the caller)."""
+        with contextlib.suppress(Retryable, FusionError):
+            self._call("DELETE", f"/v1/request/{correlation_id}")
 
     def next_message(self, timeout_s: float) -> Delivered | Terminal | Empty:
         resp = self._call("GET", "/v1/messages/next", timeout_s=timeout_s)
@@ -158,30 +222,18 @@ class TunnelClient:
         t = self._terminal(resp)
         if t is not None:
             return t
-        if resp.status == 400:
-            raise ProtocolError("POST /v1/messages: inReplyTo does not match a delivered query", peer=self.peer)
-        if resp.status not in (200, 202):
+        if resp.status != 202:
             raise ProtocolError(f"POST /v1/messages returned status {resp.status}", peer=self.peer)
         return Budget.from_json(resp.body.get("budget")) if isinstance(resp.body, dict) else None
-
-    def ack(self, message_id: str) -> None:
-        resp = self._call("POST", f"/v1/messages/{message_id}/ack")
-        if resp.status == 404:
-            _log.event("ack.unknown", logging.WARNING, peer=self.peer, messageId=message_id)
-            return
-        if resp.terminal:
-            return
-        if resp.status not in (200, 202, 204):
-            raise ProtocolError(f"ack returned status {resp.status}", peer=self.peer)
 
     def complete(self) -> Terminal | None:
         resp = self._call("POST", "/v1/complete", {})
         t = self._terminal(resp)
         if t is not None:
             return t
-        if resp.status not in (200, 202, 204):
+        if resp.status != 202:
             raise ProtocolError(f"POST /v1/complete returned status {resp.status}", peer=self.peer)
         return None
 
 
-__all__ = ["TunnelClient"]
+__all__ = ["INVALID_JSON", "HttpClient", "HttpResponse", "TransportError", "TunnelClient"]

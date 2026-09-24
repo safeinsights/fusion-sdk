@@ -1,4 +1,4 @@
-"""Tests for tools/fake_tunnel_pair: the double must implement spec/local-api.md exactly."""
+"""Tests for tools/fake_tunnel_pair: the double must implement spec/local-api.md (local API 2.0) exactly."""
 
 from __future__ import annotations
 
@@ -52,72 +52,112 @@ def scenario(name: str, **overrides: Any) -> Any:
     return replace(sc, **overrides) if overrides else sc
 
 
+def pair_for(name: str, **overrides: Any) -> tuple[FakeTunnelPair, Http, Http]:
+    pair = FakeTunnelPair(scenario(name, **{"longpoll_ms": 200, **overrides}))
+    pair.start()
+    leg: LegEndpoints = pair.endpoints[0]
+    return pair, Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
+
+
 @pytest.fixture
 def happy() -> Iterator[tuple[FakeTunnelPair, Http, Http]]:
-    with FakeTunnelPair(scenario("happy", longpoll_ms=300)) as pair:
-        leg: LegEndpoints = pair.endpoints[0]
-        yield pair, Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
+    pair, dst, src = pair_for("happy", longpoll_ms=300)
+    yield pair, dst, src
+    pair.stop()
 
 
 def one_round(dst: Http, src: Http, query: Any = QUERY, reply: Any = REPLY) -> tuple[str, Any]:
     status, body = dst.call("POST", "/v1/request", {"payload": query})
-    assert status == 202, body
+    assert status == 202 and body["reissued"] is False, body
     cid = body["correlationId"]
     status, msg = src.call("GET", "/v1/messages/next")
     assert status == 200 and msg["correlationId"] == cid
-    assert src.call("POST", f"/v1/messages/{msg['messageId']}/ack")[0] == 204
     status, posted = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": reply})
-    assert status == 202, posted
+    assert status == 202 and posted["replayed"] is False, posted
     status, resp = dst.call("GET", f"/v1/responses/{cid}")
     assert status == 200 and resp["correlationId"] == cid
-    assert dst.call("POST", f"/v1/messages/{resp['messageId']}/ack")[0] == 204
     return cid, resp
 
 
-def test_info_and_auth(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
+def test_info_auth_and_error_shape(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
     status, info = dst.call("GET", "/v1/info")
     assert status == 200
-    assert info["role"] == "destination" and info["state"] == "CHANNEL_UP" and info["apiVersion"] == "1.0.0"
-    assert info["peerOrgSlug"] == "dp-a" and info["legId"] == "leg-a"
+    assert info["role"] == "destination" and info["state"] == "CHANNEL_UP" and info["apiVersion"] == "2.0.0"
+    assert info["peerOrgSlug"] == "dp-a" and info["legId"] == "leg-a" and info["caps"] == {}
+    assert {"studyId", "jobId", "orgSlug", "direction"} <= set(info)
     assert "guards" not in info
     assert src.call("GET", "/v1/info")[1]["role"] == "source"
-    assert dst.call("GET", "/v1/info", token="wrong")[0] == 401
+    status, body = dst.call("GET", "/v1/info", token="wrong")
+    assert status == 401 and body["code"] == "UNAUTHORIZED" and isinstance(body["message"], str)
     assert dst.call("GET", "/v1/info", token=src.token)[0] == 401  # tokens are per tunnel
+    status, body = dst.call("GET", "/v1/nope")
+    assert status == 404 and body["code"] == "NOT_FOUND"
 
 
 def test_direction_matrix(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
-    assert src.call("POST", "/v1/request", {"payload": QUERY})[0] == 403
-    assert src.call("GET", "/v1/responses/x")[0] == 403
-    assert src.call("POST", "/v1/complete", {})[0] == 403
-    assert dst.call("GET", "/v1/messages/next")[0] == 403
-    assert dst.call("POST", "/v1/messages", {"inReplyTo": "x", "payload": REPLY})[0] == 403
+    for status, body in (
+        src.call("POST", "/v1/request", {"payload": QUERY}),
+        src.call("GET", "/v1/responses/x"),
+        src.call("POST", "/v1/complete", {}),
+        src.call("DELETE", "/v1/request/x"),
+        dst.call("GET", "/v1/messages/next"),
+        dst.call("POST", "/v1/messages", {"inReplyTo": "x", "payload": REPLY}),
+    ):
+        assert status == 403 and body["code"] == "FORBIDDEN"
 
 
-def test_happy_round_and_budget(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
+def test_happy_round_budget_and_delivery_is_the_ack(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     pair, dst, src = happy
-    _, resp = one_round(dst, src)
+    cid, resp = one_round(dst, src)
     assert resp["payload"] == REPLY
-    assert resp["budget"]["roundsUsed"] == 1 and resp["budget"]["roundsMax"] is None
+    assert resp["budget"]["roundsUsed"] == 1 and "roundsMax" not in resp["budget"]
     assert resp["budget"]["responseBytesUsed"] == canonical_bytes(REPLY)
     assert resp["budget"]["queryBytesUsed"] == canonical_bytes(QUERY)
     assert resp["receivedAt"].endswith("Z")
     snap = pair.leg("leg-a").snapshot()
-    assert snap["inFlight"] is None and snap["rounds"][0]["responseAcked"] is True
+    assert snap["inFlight"] is None and snap["rounds"][0]["responseDelivered"] is True
+    # Delivered once: a second poll holds (the round is complete), and the next round is accepted.
+    assert dst.call("GET", f"/v1/responses/{cid}")[0] == 204
+    assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 202
+    # A completed round cannot be re-issued.
+    status, body = dst.call("POST", "/v1/request", {"payload": QUERY, "correlationId": cid})
+    assert status == 409 and body["code"] == "CONFLICT"
 
 
 def test_single_in_flight_409_and_empty_hold_204(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, _ = happy
     cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
-    assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 409
-    # Same correlationId re-issue is idempotent (T1).
-    assert dst.call("POST", "/v1/request", {"payload": QUERY, "correlationId": cid}) == (202, {"correlationId": cid})
+    status, body = dst.call("POST", "/v1/request", {"payload": QUERY})
+    assert status == 409 and body["code"] == "CONFLICT" and body["correlationId"] == cid
+    # Same correlationId re-issue is idempotent.
+    assert dst.call("POST", "/v1/request", {"payload": QUERY, "correlationId": cid}) == (
+        202,
+        {"correlationId": cid, "reissued": True},
+    )
     t0 = time.monotonic()
     assert dst.call("GET", f"/v1/responses/{cid}")[0] == 204
     assert 0.2 <= time.monotonic() - t0 < 5
-    assert dst.call("GET", "/v1/responses/unknown")[0] == 404
-    assert dst.call("POST", "/v1/complete", {})[0] == 409
+    status, body = dst.call("GET", "/v1/responses/unknown")
+    assert status == 404 and body["code"] == "NOT_FOUND"
+
+
+def test_validation_and_too_large() -> None:
+    pair, dst, src = pair_for("happy", max_body_bytes=300)
+    try:
+        status, body = dst.call("POST", "/v1/request", {"nope": 1})
+        assert status == 400 and body["code"] == "VALIDATION" and body["issues"][0]["path"] == "payload"
+        status, body = src.call("POST", "/v1/messages", {"payload": REPLY})
+        assert status == 400 and body["code"] == "VALIDATION"
+        status, body = dst.call("POST", "/v1/request", {"payload": {**QUERY, "pad": "x" * 400}})
+        assert status == 413 and body["code"] == "TOO_LARGE"
+        cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
+        src.call("GET", "/v1/messages/next")
+        status, body = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": {**REPLY, "pad": "x" * 400}})
+        assert status == 413 and body["code"] == "TOO_LARGE"
+    finally:
+        pair.stop()
 
 
 def test_not_ready_then_up() -> None:
@@ -125,35 +165,11 @@ def test_not_ready_then_up() -> None:
         leg = pair.endpoints[0]
         dst = Http(leg.destination.endpoint, leg.destination.token)
         status, body = dst.call("POST", "/v1/request", {"payload": QUERY})
-        assert status == 503
-        assert body["code"] == "NOT_READY"
+        assert status == 503 and body["code"] == "NOT_READY"
         assert dst.call("GET", "/v1/info")[1]["state"] == "RELAY_ATTACHED"
         time.sleep(0.7)
         assert dst.call("GET", "/v1/info")[1]["state"] == "CHANNEL_UP"
         assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 202
-
-
-def test_redelivery_of_unacked_query_and_dead_letter() -> None:
-    # Hold (100 ms) is shorter than redelivery (200 ms) so an immediate re-poll is an empty hold.
-    with FakeTunnelPair(scenario("dead-letter", longpoll_ms=100)) as pair:
-        leg = pair.endpoints[0]
-        dst, src = Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
-        cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
-        m1 = src.call("GET", "/v1/messages/next")[1]
-        assert src.call("GET", "/v1/messages/next")[0] == 204  # not yet due for redelivery
-        time.sleep(0.15)
-        m2 = src.call("GET", "/v1/messages/next")[1]
-        assert m2["messageId"] == m1["messageId"] and m2["correlationId"] == cid
-        time.sleep(0.25)
-        status, body = src.call("GET", "/v1/messages/next")
-        assert status == 200 and body == {
-            "terminal": True,
-            "code": "SESSION_ERRORED",
-            "message": body["message"],
-            "detail": body["detail"],
-        }
-        assert dst.call("GET", f"/v1/responses/{cid}")[1]["code"] == "SESSION_ERRORED"
-        assert dst.call("GET", "/v1/info")[1]["state"] == "ERRORED"
 
 
 def test_timeout_reissue_scenario() -> None:
@@ -163,8 +179,7 @@ def test_timeout_reissue_scenario() -> None:
         one_round(dst, src)
         # Round 2: the source answers but the response is "lost".
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
-        msg = src.call("GET", "/v1/messages/next")[1]
-        src.call("POST", f"/v1/messages/{msg['messageId']}/ack")
+        src.call("GET", "/v1/messages/next")
         assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 202
         assert dst.call("GET", f"/v1/responses/{cid}")[0] == 204
         # Re-issue with the same id: the source tunnel replays; the RC is not asked again.
@@ -182,30 +197,28 @@ def test_restart_404_scenario() -> None:
         one_round(dst, src)
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
         status, body = dst.call("GET", f"/v1/responses/{cid}")
-        assert status == 404 and body["code"] == "UNKNOWN_CORRELATION"
+        assert status == 404 and body["code"] == "NOT_FOUND"
         # Forgotten: the tunnel no longer counts it in flight, so a re-issue with the same id is accepted.
         assert dst.call("POST", "/v1/request", {"payload": QUERY, "correlationId": cid})[0] == 202
         msg = src.call("GET", "/v1/messages/next")[1]
         assert msg["correlationId"] == cid
-        src.call("POST", f"/v1/messages/{msg['messageId']}/ack")
         src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})
         assert dst.call("GET", f"/v1/responses/{cid}")[1]["payload"] == REPLY
 
 
-def test_redeliver_after_ack_scenario() -> None:
-    with FakeTunnelPair(scenario("redeliver-after-ack", longpoll_ms=200)) as pair:
+def test_redeliver_query_scenario() -> None:
+    with FakeTunnelPair(scenario("redeliver-query", longpoll_ms=200)) as pair:
         leg = pair.endpoints[0]
         dst, src = Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
         one_round(dst, src)
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
         m1 = src.call("GET", "/v1/messages/next")[1]
-        src.call("POST", f"/v1/messages/{m1['messageId']}/ack")
-        m2 = src.call("GET", "/v1/messages/next")[1]
+        _, p1 = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})
+        m2 = src.call("GET", "/v1/messages/next")[1]  # delivered again although already answered
         assert m2["messageId"] == m1["messageId"] and m2["correlationId"] == cid
         assert src.call("GET", "/v1/messages/next")[0] == 204
-        _, p1 = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})
         _, p2 = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})
-        assert p1["messageId"] == p2["messageId"]  # idempotent second response
+        assert p1["replayed"] is False and p2["replayed"] is True and p1["messageId"] == p2["messageId"]
         assert pair.leg("leg-a").snapshot()["budget"]["roundsUsed"] == 2
 
 
@@ -214,10 +227,9 @@ def test_backpressure_and_transient_faults() -> None:
         leg = pair.endpoints[0]
         dst, src = Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
         status, body = dst.call("POST", "/v1/request", {"payload": QUERY})
-        assert status == 429 and body["retryable"] is True
+        assert status == 429 and body["code"] == "BACKPRESSURE"
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
-        msg = src.call("GET", "/v1/messages/next")[1]
-        src.call("POST", f"/v1/messages/{msg['messageId']}/ack")
+        src.call("GET", "/v1/messages/next")
         assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 429
         assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 202
     with FakeTunnelPair(scenario("transient-errors", longpoll_ms=200)) as pair:
@@ -225,8 +237,10 @@ def test_backpressure_and_transient_faults() -> None:
         dst = Http(leg.destination.endpoint, leg.destination.token)
         src = Http(leg.source.endpoint, leg.source.token)
         one_round(dst, src)  # submit call 1
-        assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 503  # call 2: injected NOT_READY
-        assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 500  # call 3: injected 500
+        status, body = dst.call("POST", "/v1/request", {"payload": QUERY})  # call 2: injected NOT_READY
+        assert status == 503 and body["code"] == "NOT_READY"
+        status, body = dst.call("POST", "/v1/request", {"payload": QUERY})  # call 3: injected 500
+        assert status == 500 and body["code"] == "INTERNAL"
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]  # call 4
         assert dst.call("POST", "/v1/request", {"payload": QUERY, "correlationId": cid})[0] == 202
 
@@ -235,31 +249,27 @@ def test_limit_exceeded_rounds_and_bytes() -> None:
     with FakeTunnelPair(scenario("limit-exceeded-rounds", longpoll_ms=200)) as pair:
         leg = pair.endpoints[0]
         dst, src = Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
-        assert src.call("GET", "/v1/info")[1]["caps"]["maxRounds"] == 2
+        assert src.call("GET", "/v1/info")[1]["caps"] == {"maxRounds": 2}
         one_round(dst, src)
         _, resp = one_round(dst, src)
         assert resp["budget"] == {**resp["budget"], "roundsUsed": 2, "roundsMax": 2}
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
         status, body = dst.call("GET", f"/v1/responses/{cid}")
-        assert (
-            status == 200
-            and body["terminal"] is True
-            and body["code"] == "LIMIT_EXCEEDED"
-            and body["detail"]["cap"] == "maxRounds"
-        )
+        assert status == 200 and body["terminal"] is True and body["code"] == "LIMIT_EXCEEDED"
+        assert body["detail"] == {"cap": "maxRounds", "limit": 2, "observed": 3}
         assert src.call("GET", "/v1/messages/next")[1]["code"] == "LIMIT_EXCEEDED"
         assert dst.call("POST", "/v1/request", {"payload": QUERY})[1]["code"] == "LIMIT_EXCEEDED"
+        assert dst.call("POST", "/v1/complete", {})[1]["code"] == "LIMIT_EXCEEDED"  # every route but /v1/info
+        assert dst.call("GET", "/v1/info")[1]["state"] == "LIMIT_EXCEEDED"
     with FakeTunnelPair(scenario("limit-exceeded-bytes", longpoll_ms=200)) as pair:
         leg = pair.endpoints[0]
         dst, src = Http(leg.destination.endpoint, leg.destination.token), Http(leg.source.endpoint, leg.source.token)
         cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
-        msg = src.call("GET", "/v1/messages/next")[1]
-        src.call("POST", f"/v1/messages/{msg['messageId']}/ack")
+        src.call("GET", "/v1/messages/next")
         big = {**REPLY, "body": "x" * 200}
         status, body = src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": big})
-        assert (
-            status == 200 and body["code"] == "LIMIT_EXCEEDED" and body["detail"]["cap"] == "maxResponseBytesPerRound"
-        )
+        assert status == 200 and body["code"] == "LIMIT_EXCEEDED"
+        assert body["detail"]["cap"] == "maxResponsePlaintextBytesPerRound" and body["detail"]["limit"] == 64
         assert dst.call("GET", f"/v1/responses/{cid}")[1]["code"] == "LIMIT_EXCEEDED"
         assert pair.leg("leg-a").snapshot()["budget"]["responseBytesUsed"] == 0  # nothing was sent
 
@@ -271,50 +281,46 @@ def test_session_errored_after_round() -> None:
         one_round(dst, src)
         assert dst.call("POST", "/v1/request", {"payload": QUERY})[1]["code"] == "SESSION_ERRORED"
         assert src.call("GET", "/v1/messages/next")[1]["code"] == "SESSION_ERRORED"
+        assert dst.call("GET", "/v1/info")[1]["state"] == "ERRORED"
 
 
 def test_complete_is_study_complete_for_the_source(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
     one_round(dst, src)
-    assert dst.call("POST", "/v1/complete", {}) == (202, {})
-    assert dst.call("POST", "/v1/complete", {}) == (202, {})
+    assert dst.call("POST", "/v1/complete", {}) == (202, {"state": "CLOSED"})
     status, body = src.call("GET", "/v1/messages/next")
     assert status == 200 and body["terminal"] is True and body["code"] == "STUDY_COMPLETE"
     assert dst.call("GET", "/v1/info")[1]["state"] == "CLOSED"
+    assert dst.call("POST", "/v1/complete", {})[1] == body  # terminal on every route from now on
     assert dst.call("POST", "/v1/request", {"payload": QUERY})[1]["code"] == "STUDY_COMPLETE"
 
 
-def test_abandon_round_t7(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
+def test_abandon_round(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
     cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
     assert dst.call("POST", "/v1/request", {"payload": QUERY})[0] == 409
     assert dst.call("DELETE", f"/v1/request/{cid}")[0] == 204
     assert dst.call("DELETE", f"/v1/request/{cid}")[0] == 204  # idempotent
     assert dst.call("DELETE", "/v1/request/unknown")[0] == 204
-    assert src.call("DELETE", f"/v1/request/{cid}")[0] == 403
     # The next round is accepted; the late response to the abandoned one is swallowed.
     cid2 = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
     m1 = src.call("GET", "/v1/messages/next")[1]
     assert m1["correlationId"] == cid
-    src.call("POST", f"/v1/messages/{m1['messageId']}/ack")
     assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 202
     assert dst.call("GET", f"/v1/responses/{cid}")[0] == 404
     m2 = src.call("GET", "/v1/messages/next")[1]
     assert m2["correlationId"] == cid2
-    src.call("POST", f"/v1/messages/{m2['messageId']}/ack")
     src.call("POST", "/v1/messages", {"inReplyTo": cid2, "payload": REPLY})
     assert dst.call("GET", f"/v1/responses/{cid2}")[1]["correlationId"] == cid2
 
 
-def test_source_validation_and_ack_404(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
+def test_respond_to_an_unknown_round_is_409(happy: tuple[FakeTunnelPair, Http, Http]) -> None:
     _, dst, src = happy
-    assert src.call("POST", "/v1/messages", {"inReplyTo": "nope", "payload": REPLY})[0] == 400
-    assert src.call("POST", "/v1/messages", {"payload": REPLY})[0] == 422
-    assert dst.call("POST", "/v1/request", {"nope": 1})[0] == 422
-    assert src.call("POST", "/v1/messages/unknown/ack")[0] == 404
-    assert dst.call("POST", "/v1/messages/unknown/ack")[0] == 404
-    # A query delivered but not yet ACKed can still be answered.
+    status, body = src.call("POST", "/v1/messages", {"inReplyTo": "nope", "payload": REPLY})
+    assert status == 409 and body["code"] == "CONFLICT" and body["correlationId"] == "nope"
+    # Submitted but not yet delivered to the source: still not answerable.
     cid = dst.call("POST", "/v1/request", {"payload": QUERY})[1]["correlationId"]
+    assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 409
     src.call("GET", "/v1/messages/next")
     assert src.call("POST", "/v1/messages", {"inReplyTo": cid, "payload": REPLY})[0] == 202
 
@@ -375,7 +381,7 @@ def test_cli_announces_and_exits_on_stdin_eof(tmp_path: Path) -> None:
         assert data["legs"][0]["legId"] == "leg-a" and data["pid"] == proc.pid
         assert json.loads(announce.read_text())["pid"] == proc.pid
         dst = Http(data["legs"][0]["destination"]["endpoint"], data["legs"][0]["destination"]["token"])
-        assert dst.call("GET", "/v1/info")[0] == 200
+        assert dst.call("GET", "/v1/info")[1]["apiVersion"] == "2.0.0"
         assert proc.stdin is not None
         proc.stdin.close()
         assert proc.wait(timeout=10) == 0

@@ -57,26 +57,17 @@ def echo_handler(query: JSON) -> JSON:
 
 
 class ScriptedSource:
-    """A source research container without the SDK: long-poll, ACK, run `handler`, respond.
+    """A source research container without the SDK: long-poll, run `handler`, respond.
 
     `handler(query_envelope) -> response_envelope`. Records every delivered correlationId and stops
     on a terminal body (its code is kept in `terminal_code`).
     """
 
     def __init__(
-        self,
-        endpoint: str,
-        token: str,
-        handler: Callable[[JSON], JSON] = echo_handler,
-        *,
-        ack: bool = True,
-        respond: bool = True,
-        hold_s: float = 2.0,
+        self, endpoint: str, token: str, handler: Callable[[JSON], JSON] = echo_handler, *, hold_s: float = 2.0
     ) -> None:
         self.http = RawTunnel(endpoint, token)
         self.handler = handler
-        self.ack = ack
-        self.respond = respond
         self.hold_s = hold_s
         self.delivered: list[str] = []
         self.calls = 0
@@ -121,10 +112,6 @@ class ScriptedSource:
                 return
             cid = body["correlationId"]
             self.delivered.append(cid)
-            if self.ack:
-                self.http.call("POST", f"/v1/messages/{body['messageId']}/ack")
-            if not self.respond:
-                continue
             self.calls += 1
             reply = self.handler(body["payload"])
             for _attempt in range(20):  # a real source retries BACKPRESSURE; so does this double

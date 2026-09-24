@@ -8,32 +8,34 @@
   },
   "terminalCodes": {
     "STUDY_COMPLETE": "The destination called POST /v1/complete and CLOSE reached this tunnel. Clean end of the source loop.",
-    "SESSION_ERRORED": "Dead-letter (MAX_DELIVERIES exceeded), un-ACKed TTL expiry, session closed by the relay, or the tunnel entered ERRORED.",
-    "LIMIT_EXCEEDED": "A source-approved cap was breached (rounds, response bytes, query bytes, rounds per hour). Terminal for this leg only."
+    "SESSION_ERRORED": "The relay closed the session, or the tunnel entered ERRORED.",
+    "LIMIT_EXCEEDED": "A source-approved cap was breached (rounds, rounds per hour, response bytes, query bytes). Terminal for this leg only; detail = {cap, limit, observed}."
   },
   "localClasses": [
     { "python": "FusionError", "r": "fusion_error", "terminal": false, "when": "Base class. Never raised directly." },
     { "python": "ConfigError", "r": "fusion_config_error", "terminal": true, "when": "Env missing or malformed; endpoint not local; incompatible apiVersion; 401; 403 (wrong role)." },
     { "python": "NotReadyError", "r": "fusion_not_ready_error", "terminal": true, "when": "Readiness timeout waiting for CHANNEL_UP." },
-    { "python": "ConcurrencyError", "r": "fusion_concurrency_error", "terminal": false, "when": "Second in-flight request on a peer; 409 from the tunnel." },
+    { "python": "ConcurrencyError", "r": "fusion_concurrency_error", "terminal": false, "when": "Second in-flight request on a peer; 409 from POST /v1/request. Field: correlation_id." },
     { "python": "RoundTimeoutError", "r": "fusion_round_timeout_error", "terminal": false, "when": "Round timeout elapsed after FUSION_ROUND_MAX_REISSUES re-issues. Peer stays usable." },
     { "python": "RemoteError", "r": "fusion_remote_error", "terminal": false, "when": "The source returned an error envelope. Fields: code, message, detail." },
     { "python": "TerminalError", "r": "fusion_terminal_error", "terminal": true, "when": "Base of the two leg-terminal errors below. Never raised directly." },
-    { "python": "LimitExceededError", "r": "fusion_limit_exceeded_error", "terminal": true, "when": "Tunnel reported LIMIT_EXCEEDED on this leg." },
+    { "python": "LimitExceededError", "r": "fusion_limit_exceeded_error", "terminal": true, "when": "Tunnel reported LIMIT_EXCEEDED on this leg. Field: cap (detail.cap)." },
     { "python": "SessionError", "r": "fusion_session_error", "terminal": true, "when": "Tunnel reported SESSION_ERRORED on this leg. Field: code." },
-    { "python": "ProtocolError", "r": "fusion_protocol_error", "terminal": false, "when": "Undecodable local-API response or envelope (still ACKed); 422 from the tunnel." }
+    { "python": "ProtocolError", "r": "fusion_protocol_error", "terminal": false, "when": "Undecodable local-API response or envelope; 400, 413 or 422 from the tunnel." }
   ],
   "httpStatusMapping": [
     { "status": 200, "condition": "body.terminal == true", "behavior": "terminal", "raises": "LimitExceededError | SessionError, or clean return on STUDY_COMPLETE" },
     { "status": 200, "condition": "otherwise", "behavior": "proceed" },
     { "status": 202, "condition": "", "behavior": "proceed" },
     { "status": 204, "condition": "long-poll routes", "behavior": "re-poll (empty hold)" },
-    { "status": 204, "condition": "POST /v1/messages/{id}/ack", "behavior": "proceed" },
+    { "status": 204, "condition": "DELETE /v1/request/{id}", "behavior": "abandoned" },
+    { "status": 400, "condition": "", "behavior": "raise", "raises": "ProtocolError" },
     { "status": 401, "condition": "", "behavior": "raise", "raises": "ConfigError" },
     { "status": 403, "condition": "", "behavior": "raise", "raises": "ConfigError" },
     { "status": 404, "condition": "GET /v1/responses/{id}", "behavior": "re-issue with the same correlationId" },
-    { "status": 404, "condition": "POST /v1/messages/{id}/ack", "behavior": "log ack.unknown, proceed" },
-    { "status": 409, "condition": "", "behavior": "raise", "raises": "ConcurrencyError" },
+    { "status": 409, "condition": "POST /v1/request", "behavior": "raise", "raises": "ConcurrencyError (correlation_id = the in-flight round)" },
+    { "status": 409, "condition": "POST /v1/messages", "behavior": "log round.protocol_error, drop the response, back to the loop" },
+    { "status": 413, "condition": "", "behavior": "raise", "raises": "ProtocolError" },
     { "status": 422, "condition": "", "behavior": "raise", "raises": "ProtocolError" },
     { "status": 429, "condition": "code == BACKPRESSURE", "behavior": "backoff + retry within the round timeout" },
     { "status": 503, "condition": "before CHANNEL_UP", "behavior": "readiness wait (connect/serve) or backoff + retry (during a round)" },

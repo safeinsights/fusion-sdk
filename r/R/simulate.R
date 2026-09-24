@@ -1,4 +1,4 @@
-# In-process simulator for the SafeInsights IDE / CRATE (plan Phase 6, decision A15).
+# In-process simulator for the SafeInsights IDE / CRATE.
 #
 # An implementation of the same internal transport interface `tunnel_transport()` provides, so
 # fusion_connect(), fusion_request() and the source server run their real code paths (envelopes,
@@ -6,7 +6,7 @@
 # synchronous: a destination submit() runs the source pipeline inline, which is what makes it work
 # in single-threaded R.
 
-sim_api_version <- "1.0.0"
+sim_api_version <- "2.0.0"
 
 #' Fault injection for [fusion_simulate()]
 #'
@@ -16,7 +16,8 @@ sim_api_version <- "1.0.0"
 #'   `correlationId` (exercises round-timeout handling with a short `timeout`).
 #' @param error_after_round The leg becomes `SESSION_ERRORED` after this round completes.
 #' @param max_rounds Cap on rounds enforced by the simulated source tunnel (`LIMIT_EXCEEDED`).
-#' @param max_response_bytes_per_round Cap on response bytes per round (`LIMIT_EXCEEDED`).
+#' @param max_response_bytes_per_round Cap on response bytes per round (`LIMIT_EXCEEDED` with
+#'   `cap = "maxResponsePlaintextBytesPerRound"`).
 #' @return An object of class `fusion_sim_faults`.
 #' @export
 fusion_sim_faults <- function(drop_response_rounds = integer(0), error_after_round = NULL, max_rounds = NULL,
@@ -78,7 +79,7 @@ sim_source_view <- function(leg) {
     info = function() sim_info(leg, "source"),
     submit = function(payload, correlation_id = NULL) stop("a source never submits"),
     poll_response = function(correlation_id, timeout_s) stop("a source never polls responses"),
-    abandon = function(correlation_id) FALSE,
+    abandon = function(correlation_id) stop("a source never abandons"),
     next_message = function(timeout_s) if (leg$closed) list(kind = "terminal", code = "STUDY_COMPLETE", message = "", detail = NULL) else list(kind = "empty"),
     post_response = function(in_reply_to, payload) {
       rnd <- leg$rounds[[in_reply_to]]
@@ -86,8 +87,8 @@ sim_source_view <- function(leg) {
       nbytes <- canonical_bytes(payload)
       cap <- leg$faults$max_response_bytes_per_round
       if (!is.null(cap) && nbytes > cap) {
-        return(sim_terminal(leg, "LIMIT_EXCEEDED", "response exceeds maxResponseBytesPerRound",
-                            list(cap = "maxResponseBytesPerRound", limit = cap, observed = nbytes)))
+        return(sim_terminal(leg, "LIMIT_EXCEEDED", "response exceeds maxResponsePlaintextBytesPerRound",
+                            list(cap = "maxResponsePlaintextBytesPerRound", limit = cap, observed = nbytes)))
       }
       rnd$response <- sim_wire(payload)
       rnd$response_message_id <- sim_id()
@@ -97,7 +98,6 @@ sim_source_view <- function(leg) {
       leg$rounds_used <- leg$rounds_used + 1L
       sim_budget(leg)
     },
-    ack = function(message_id) invisible(NULL),
     complete = function() stop("a source never completes")
   ), class = "fusion_transport")
 }
@@ -129,7 +129,7 @@ sim_destination_view <- function(leg, srv) {
       }
       cid <- if (is.null(correlation_id)) sim_id() else correlation_id
       leg$rounds[[cid]] <- list(correlation_id = cid, round_no = leg$round_counter, query = payload, response = NULL,
-                                response_message_id = NULL, deliverable = FALSE, acked = FALSE)
+                                response_message_id = NULL, deliverable = FALSE, delivered = FALSE)
       leg$query_bytes_used <- leg$query_bytes_used + canonical_bytes(payload)
       msg <- list(kind = "delivered", message_id = sim_id(), correlation_id = cid, payload = sim_wire(payload), budget = sim_budget(leg), received_at = NULL)
       outcome <- server_step(srv, msg)
@@ -139,7 +139,10 @@ sim_destination_view <- function(leg, srv) {
     poll_response = function(correlation_id, timeout_s) {
       if (!is.null(leg$terminal)) return(leg$terminal)
       rnd <- leg$rounds[[correlation_id]]
-      if (!is.null(rnd) && isTRUE(rnd$deliverable) && !is.null(rnd$response_message_id) && !isTRUE(rnd$acked)) {
+      if (!is.null(rnd) && isTRUE(rnd$deliverable) && !is.null(rnd$response_message_id) && !isTRUE(rnd$delivered)) {
+        rnd$delivered <- TRUE # delivery is the acknowledgement
+        leg$rounds[[correlation_id]] <- rnd
+        if (isTRUE(leg$faults$error_after_round == rnd$round_no)) sim_terminal(leg, "SESSION_ERRORED", "simulated session error")
         return(list(kind = "delivered", message_id = rnd$response_message_id, correlation_id = correlation_id,
                     payload = rnd$response, budget = sim_budget(leg), received_at = NULL))
       }
@@ -149,25 +152,13 @@ sim_destination_view <- function(leg, srv) {
     abandon = function(correlation_id) {
       rnd <- leg$rounds[[correlation_id]]
       if (!is.null(rnd)) {
-        rnd$acked <- TRUE
+        rnd$delivered <- TRUE
         leg$rounds[[correlation_id]] <- rnd
-      }
-      TRUE
-    },
-    next_message = function(timeout_s) stop("a destination never polls messages"),
-    post_response = function(in_reply_to, payload) stop("a destination never posts responses"),
-    ack = function(message_id) {
-      for (cid in names(leg$rounds)) {
-        rnd <- leg$rounds[[cid]]
-        if (identical(rnd$response_message_id, message_id)) {
-          rnd$acked <- TRUE
-          leg$rounds[[cid]] <- rnd
-          if (isTRUE(leg$faults$error_after_round == rnd$round_no)) sim_terminal(leg, "SESSION_ERRORED", "simulated session error")
-          break
-        }
       }
       invisible(NULL)
     },
+    next_message = function(timeout_s) stop("a destination never polls messages"),
+    post_response = function(in_reply_to, payload) stop("a destination never posts responses"),
     complete = function() {
       if (!is.null(leg$terminal)) return(leg$terminal)
       leg$closed <- TRUE

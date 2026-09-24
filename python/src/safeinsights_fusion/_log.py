@@ -14,7 +14,7 @@ from typing import Any
 LOGGER_NAME = "safeinsights_fusion"
 logger = logging.getLogger(LOGGER_NAME)
 
-#: The only keys an event line may carry (spec/log-events.md "Allowed fields").
+#: The only keys an event line may carry: exactly spec/log-events.md "Allowed fields" (a test checks).
 ALLOWED_FIELDS = frozenset(
     {
         "peer",
@@ -33,20 +33,13 @@ ALLOWED_FIELDS = frozenset(
         "guard",
         "limit",
         "observed",
+        "cap",
         "roundsUsed",
         "roundsMax",
-        "responseBytesUsed",
-        "responseBytesMax",
-        "queryBytesUsed",
-        "queryBytesMax",
-        "roundsPerHourUsed",
-        "roundsPerHourMax",
         "maxDistinctPersonIds",
         "minGroupSize",
         "endpointCount",
         "apiVersion",
-        "cap",
-        "label",
     }
 )
 

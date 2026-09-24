@@ -9,41 +9,15 @@ from typing import Any
 
 DEFAULT_SPEC_DIR = Path(__file__).resolve().parents[2] / "spec" / "scenarios"
 
-
-@dataclass(frozen=True)
-class Caps:
-    max_rounds: int | None = None
-    max_response_bytes: int | None = None
-    max_response_bytes_per_round: int | None = None
-    max_query_bytes: int | None = None
-    max_query_bytes_per_round: int | None = None
-    max_rounds_per_hour: int | None = None
-
-    @staticmethod
-    def from_json(obj: dict[str, Any] | None) -> Caps:
-        if not obj:
-            return Caps()
-        return Caps(
-            max_rounds=obj.get("maxRounds"),
-            max_response_bytes=obj.get("maxResponseBytes"),
-            max_response_bytes_per_round=obj.get("maxResponseBytesPerRound"),
-            max_query_bytes=obj.get("maxQueryBytes"),
-            max_query_bytes_per_round=obj.get("maxQueryBytesPerRound"),
-            max_rounds_per_hour=obj.get("maxRoundsPerHour"),
-        )
-
-    def to_json(self) -> dict[str, Any]:
-        return {
-            "maxRounds": self.max_rounds,
-            "maxResponseBytes": self.max_response_bytes,
-            "maxResponseBytesPerRound": self.max_response_bytes_per_round,
-            "maxQueryBytes": self.max_query_bytes,
-            "maxQueryBytesPerRound": self.max_query_bytes_per_round,
-            "maxRoundsPerHour": self.max_rounds_per_hour,
-        }
-
-    def any_set(self) -> bool:
-        return any(v is not None for v in self.to_json().values())
+#: The manifest cap names, as the tunnel reports them on /v1/info and in LIMIT_EXCEEDED details.
+CAP_NAMES = (
+    "maxRounds",
+    "maxRoundsPerHour",
+    "maxResponsePlaintextBytesPerRound",
+    "maxCumulativeResponsePlaintextBytes",
+    "maxQueryPlaintextBytesPerRound",
+    "maxCumulativeQueryPlaintextBytes",
+)
 
 
 @dataclass(frozen=True)
@@ -54,7 +28,7 @@ class Faults:
     server_error_on_request: frozenset[int] = frozenset()
     drop_response_rounds: frozenset[int] = frozenset()
     forget_correlation_rounds: frozenset[int] = frozenset()
-    redeliver_after_ack_rounds: frozenset[int] = frozenset()
+    redeliver_rounds: frozenset[int] = frozenset()
     delay_delivery_ms: dict[int, int] = field(default_factory=dict)
     error_after_round: int | None = None
 
@@ -73,7 +47,7 @@ class Faults:
             server_error_on_request=fs("serverErrorOnRequest"),
             drop_response_rounds=fs("dropResponseRounds"),
             forget_correlation_rounds=fs("forgetCorrelationRounds"),
-            redeliver_after_ack_rounds=fs("redeliverAfterAckRounds"),
+            redeliver_rounds=fs("redeliverRounds"),
             delay_delivery_ms={int(k): int(v) for k, v in obj.get("delayDeliveryMs", {}).items()},
             error_after_round=obj.get("errorAfterRound"),
         )
@@ -83,7 +57,7 @@ class Faults:
 class LegSpec:
     leg_id: str
     peer_org_slug: str
-    caps: Caps = Caps()
+    caps: dict[str, int] = field(default_factory=dict)  # manifest cap name → limit; absent = unlimited
     guards: dict[str, Any] | None = None
     operations: list[dict[str, Any]] | None = None
     faults: Faults = Faults()
@@ -96,18 +70,18 @@ class Scenario:
     description: str = ""
     ready_delay_ms: int = 0
     longpoll_ms: int = 25_000
-    redelivery_ms: int = 5_000
-    max_deliveries: int = 5
+    max_body_bytes: int = 64 * 1024 * 1024
 
     @staticmethod
     def from_json(obj: dict[str, Any]) -> Scenario:
         legs: list[LegSpec] = []
         for leg in obj["legs"]:
+            caps = leg.get("caps", obj.get("caps")) or {}
             legs.append(
                 LegSpec(
                     leg_id=leg["legId"],
                     peer_org_slug=leg["peerOrgSlug"],
-                    caps=Caps.from_json(leg.get("caps", obj.get("caps"))),
+                    caps={k: int(v) for k, v in caps.items() if k in CAP_NAMES and v is not None},
                     guards=leg.get("guards", obj.get("guards")),
                     operations=leg.get("operations", obj.get("operations")),
                     faults=Faults.from_json(leg.get("faults", obj.get("faults"))),
@@ -119,8 +93,7 @@ class Scenario:
             legs=tuple(legs),
             ready_delay_ms=int(obj.get("readyDelayMs", 0)),
             longpoll_ms=int(obj.get("longpollMs", 25_000)),
-            redelivery_ms=int(obj.get("redeliveryMs", 5_000)),
-            max_deliveries=int(obj.get("maxDeliveries", 5)),
+            max_body_bytes=int(obj.get("maxBodyBytes", 64 * 1024 * 1024)),
         )
 
 

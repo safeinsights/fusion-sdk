@@ -19,7 +19,8 @@ fusion_sim_faults(
 
 \item{max_rounds}{Cap on rounds enforced by the simulated source tunnel (\code{LIMIT_EXCEEDED}).}
 
-\item{max_response_bytes_per_round}{Cap on response bytes per round (\code{LIMIT_EXCEEDED}).}
+\item{max_response_bytes_per_round}{Cap on response bytes per round (\code{LIMIT_EXCEEDED} with
+\code{cap = "maxResponsePlaintextBytesPerRound"}).}
 }
 \value{
 An object of class \code{fusion_sim_faults}.

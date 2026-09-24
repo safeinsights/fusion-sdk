@@ -7,14 +7,14 @@ handler and what the SDK already does for you.
 ## Why a handler can run twice
 
 A round can be redelivered to your handler when the destination re-issues it after a timeout, when a
-tunnel restarts mid-round, or when your research container crashes after acknowledging the query but
+tunnel restarts mid-round, or when your research container crashes after receiving the query but
 before answering it (v2 §8). The SDK removes almost all of these cases before they reach you:
 
 | Situation | Who handles it | Handler runs again? |
 | :-- | :-- | :-- |
 | Destination re-issues the same `correlationId` after a timeout | source **tunnel** replays its cached response | no |
 | Query redelivered to the RC after the SDK already answered it | SDK **memo** (`correlationId → response`, in memory) replays | no |
-| RC process restarted between ACK and response | nobody can replay: the memo died with the process | **yes** |
+| RC process restarted between receiving the query and answering it | nobody can replay: the memo died with the process | **yes** |
 
 The last row is why the contract exists. The SDK hands your handler `ctx.correlation_id`
 (`ctx$correlation_id` in R) so you can make the rerun harmless.

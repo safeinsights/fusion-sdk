@@ -1,13 +1,14 @@
-"""Source side: the operation registry and `serve()` (plan §3 "Source serve() loop").
+"""Source side: the operation registry and `serve()`.
 
-A handler exception never crashes the loop: it becomes a HANDLER_ERROR envelope (ADR 0005). Redelivered
-queries are answered from the in-memory memo without re-running the handler; guards are enforced around
-every handler call (ADR 0002).
+A handler exception never crashes the loop: it becomes a HANDLER_ERROR envelope (ADR 0005). A query the
+tunnel delivers again is answered from the in-memory memo without re-running the handler; guards are
+enforced around every handler call (ADR 0002). Receiving a query is its acknowledgement.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import time
 import traceback
 from collections import OrderedDict
@@ -26,11 +27,21 @@ from ._envelope import (
     encode_response_error,
     encode_response_ok,
 )
-from ._http import Backoff
-from ._transport import EMPTY, Budget, Delivered, Info, Retryable, Terminal, Transport, retry_until
+from ._transport import (
+    EMPTY,
+    Backoff,
+    Budget,
+    Delivered,
+    Info,
+    Terminal,
+    Transport,
+    log_budget,
+    retry_until,
+    terminal_failure,
+)
 from ._tunnel import TunnelClient
 from .destination import API_MAJOR, wait_ready
-from .errors import ConfigError, RoundTimeoutError, terminal_error
+from .errors import ConcurrencyError, ConfigError, RoundTimeoutError
 from .guards import (
     CARDINALITIES,
     Cardinality,
@@ -167,7 +178,6 @@ class Server:
         self.info: Info | None = None
         self.guards: Guards | None = None
         self.memo = ResponseMemo(settings.memo_max_entries)
-        self.in_progress: set[str] = set()
         self.budget: Budget | None = None
         self.rounds_served = 0
 
@@ -208,28 +218,20 @@ class Server:
     def run(self) -> None:
         """Serve until STUDY_COMPLETE (returns) or a terminal error (raises)."""
         s = self._settings
-        retry_attempt = 0
         while True:
-            try:
-                msg = self._transport.next_message(timeout_s=s.poll_http_timeout_s)
-            except Retryable as exc:
-                # The source has no round timeout: keep polling with capped backoff, forever.
-                if exc.code == "BACKPRESSURE":
-                    _log.event("round.backpressure", logging.WARNING, peer=self.peer, attempt=retry_attempt)
-                else:
-                    _log.event("round.retry", logging.DEBUG, peer=self.peer, attempt=retry_attempt, code=exc.code)
-                time.sleep(self._backoff.delay(retry_attempt))
-                retry_attempt = min(retry_attempt + 1, 10)
-                continue
-            retry_attempt = 0
+            # The source has no round timeout: keep polling with capped backoff, forever.
+            msg = retry_until(
+                lambda: self._transport.next_message(timeout_s=s.poll_http_timeout_s),
+                deadline=math.inf,
+                backoff=self._backoff,
+                peer=self.peer,
+                what="poll",
+            )
             if msg is EMPTY:
                 continue
             if isinstance(msg, Terminal):
-                if msg.code == "STUDY_COMPLETE":
-                    _log.event("session.complete", peer=self.peer, roundsUsed=self.rounds_served)
-                    return
-                _log.event("session.terminal", logging.ERROR, peer=self.peer, code=msg.code)
-                raise terminal_error(msg.code, msg.message, msg.detail, peer=self.peer)
+                self._ended(msg)
+                return
             assert isinstance(msg, Delivered)
             if self.step(msg) == "STUDY_COMPLETE":
                 return
@@ -237,7 +239,6 @@ class Server:
     def step(self, msg: Delivered) -> str | None:
         """Handle one delivered query end to end. Returns a terminal code if the leg ended, else None."""
         started = time.monotonic()
-        self._ack(msg.message_id)
         if msg.budget is not None:
             self.budget = msg.budget
         _log.event(
@@ -251,15 +252,8 @@ class Server:
         if cached is not None:
             _log.event("serve.memo_replay", peer=self.peer, correlationId=msg.correlation_id)
             return self._respond(msg, cached, started, operation=None)
-        if msg.correlation_id in self.in_progress:
-            # Cannot happen under sequential processing; guarded so a future concurrent loop stays safe.
-            return None
-        self.in_progress.add(msg.correlation_id)
-        try:
-            operation, payload = self.handle(msg)
-            return self._respond(msg, payload, started, operation=operation)
-        finally:
-            self.in_progress.discard(msg.correlation_id)
+        operation, payload = self.handle(msg)
+        return self._respond(msg, payload, started, operation=operation)
 
     def handle(self, msg: Delivered) -> tuple[str | None, JSON]:
         """Decode → look up → guards → handler → guards → encode. Never raises for handler faults."""
@@ -357,9 +351,12 @@ class Server:
                 peer=self.peer,
                 what="respond",
             )
-        except RoundTimeoutError:
-            # Could not hand the response to the tunnel; the query will be redelivered and answered from the memo.
-            self.memo.put(msg.correlation_id, payload)
+        except (RoundTimeoutError, ConcurrencyError) as exc:
+            if isinstance(exc, RoundTimeoutError):
+                # The tunnel was unreachable for too long. It still holds the query and delivers it again on
+                # a later poll; the memo then answers it without re-running the handler. On a 409 the tunnel
+                # no longer knows the round (it restarted, or the round was abandoned): nothing to memoise.
+                self.memo.put(msg.correlation_id, payload)
             _log.event(
                 "round.protocol_error",
                 logging.ERROR,
@@ -369,16 +366,11 @@ class Server:
             )
             return None
         if isinstance(result, Terminal):
-            if result.code == "STUDY_COMPLETE":
-                _log.event("session.complete", peer=self.peer, roundsUsed=self.rounds_served)
-                return result.code
-            _log.event("session.terminal", logging.ERROR, peer=self.peer, code=result.code)
-            raise terminal_error(result.code, result.message, result.detail, peer=self.peer)
+            return self._ended(result)
         if isinstance(result, Budget):
             self.budget = result
         self.memo.put(msg.correlation_id, payload)
         self.rounds_served += 1
-        fields = self.budget.log_fields() if self.budget else {}
         _log.event(
             "round.served",
             peer=self.peer,
@@ -386,28 +378,18 @@ class Server:
             operation=operation,
             bytes=nbytes,
             durationMs=int((time.monotonic() - started) * 1000),
-            roundsUsed=fields.get("roundsUsed"),
-            roundsMax=fields.get("roundsMax"),
+            roundsUsed=self.budget.rounds_used if self.budget else None,
+            roundsMax=self.budget.rounds_max if self.budget else None,
         )
-        if self.budget is not None:
-            for name, used, cap in self.budget.near_limit():
-                _log.event(
-                    "budget.near_limit", logging.WARNING, peer=self.peer, **{f"{name}Used": used, f"{name}Max": cap}
-                )
+        log_budget(self.peer, self.budget)
         return None
 
-    def _ack(self, message_id: str) -> None:
-        deadline = time.monotonic() + max(5.0, self._settings.http_timeout_s * 3)
-        try:
-            retry_until(
-                lambda: self._transport.ack(message_id),
-                deadline=deadline,
-                backoff=self._backoff,
-                peer=self.peer,
-                what="ack",
-            )
-        except RoundTimeoutError:
-            _log.event("ack.failed", logging.WARNING, peer=self.peer, messageId=message_id)
+    def _ended(self, t: Terminal) -> str:
+        """The leg ended: STUDY_COMPLETE returns its code; anything else raises the typed error."""
+        if t.code == "STUDY_COMPLETE":
+            _log.event("session.complete", peer=self.peer, roundsUsed=self.rounds_served)
+            return t.code
+        raise terminal_failure(t, self.peer)
 
 
 def serve(

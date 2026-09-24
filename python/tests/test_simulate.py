@@ -101,7 +101,7 @@ def test_faults_timeout_reissue_session_error_and_caps() -> None:
     def big(fusion: Fusion) -> None:
         with pytest.raises(LimitExceededError) as exc:
             fusion.peer().request("counts_by_group", {"person_ids": ["a"]})
-        assert exc.value.cap == "maxResponseBytesPerRound"
+        assert exc.value.cap == "maxResponsePlaintextBytesPerRound"
 
     simulate(registry(), big, faults=SimFaults(max_response_bytes_per_round=10))
 

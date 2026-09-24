@@ -25,7 +25,7 @@ test_that("serve handles every body kind, guards are disabled without info.guard
 })
 
 test_that("a redelivered query is answered from the memo without re-running the handler", {
-  with_fake("redeliver-after-ack", {
+  with_fake("redeliver-query", {
     src <- start_r_source(fake)
     fusion <- connect_to(fake)
     peer <- sifusion::fusion_peer(fusion)
@@ -117,7 +117,6 @@ test_that("bad params for a non-envelope query", {
       msg <- raw_call(dst$endpoint, dst$token, "GET", paste0("/v1/responses/", cid), timeout = 20)$body
       expect_equal(msg$payload$status, "error")
       expect_equal(msg$payload$error$code, "BAD_PARAMS")
-      raw_call(dst$endpoint, dst$token, "POST", paste0("/v1/messages/", msg$messageId, "/ack"))
     }
     raw_call(dst$endpoint, dst$token, "POST", "/v1/complete", structure(list(), names = character(0)))
     expect_equal(child_wait(src), 0L)
@@ -129,10 +128,48 @@ test_that("LIMIT_EXCEEDED at POST /v1/messages raises from fusion_serve and exit
     src <- start_r_source(fake)
     fusion <- connect_to(fake)
     e <- tryCatch(sifusion::fusion_request(fusion, "total", list(pad = 500)), fusion_limit_exceeded_error = function(e) e)
-    expect_equal(e$cap, "maxResponseBytesPerRound")
+    expect_equal(e$cap, "maxResponsePlaintextBytesPerRound")
     expect_true(child_wait(src) != 0L)
     expect_match(child_output(src), "fusion_limit_exceeded_error|LIMIT_EXCEEDED")
   })
+})
+
+# A source-side transport whose POST /v1/messages outcome is scripted.
+stub_source_transport <- function(outcome) {
+  posted <- character(0)
+  structure(list(
+    endpoint = "stub", peer = "dp-a",
+    info = function() list(api_version = "2.0.0", leg_id = "leg-a", peer_org_slug = "dp-a", role = "source", direction = "dst_to_src",
+                           state = "CHANNEL_UP", guards = NULL, caps = NULL, operations = NULL),
+    submit = function(...) stop("unused"), poll_response = function(...) stop("unused"), abandon = function(...) stop("unused"),
+    next_message = function(timeout_s) list(kind = "empty"),
+    post_response = function(in_reply_to, payload) {
+      posted <<- c(posted, in_reply_to)
+      if (is.function(outcome)) outcome() else outcome
+    },
+    complete = function() stop("unused"),
+    posted = function() posted
+  ), class = "fusion_transport")
+}
+
+test_that("a 409 on the response post drops the round without raising", {
+  ops <- sifusion::fusion_operations(total = function(p, c) list(total = 42L))
+  query <- list(v = 1L, kind = "query", operation = "total", params = structure(list(), names = character(0)), encoding = "json")
+  msg <- list(kind = "delivered", message_id = "m1", correlation_id = "c1", payload = query, budget = NULL, received_at = NULL)
+  transport <- stub_source_transport(function() sifusion:::fusion_concurrency_error("409", peer = "dp-a", correlation_id = "c1"))
+  srv <- sifusion:::new_server(transport, ops, fast_settings(), "x")
+  sifusion:::server_start(srv, sifusion:::now_s() + 1)
+  lines <- capture_fusion_log(expect_null(sifusion:::server_step(srv, msg)))
+  expect_equal(transport$posted(), "c1")
+  expect_null(sifusion:::memo_get(srv$memo, "c1"))
+  expect_equal(srv$rounds_served, 0L)
+  expect_true(any(grepl("^fusion round.protocol_error peer=dp-a correlationId=c1 messageId=m1$", lines)))
+  # A terminal body on the post ends the leg like one on the poll.
+  transport <- stub_source_transport(list(kind = "terminal", code = "LIMIT_EXCEEDED", message = "cap", detail = list(cap = "maxRounds", limit = 1L, observed = 2L)))
+  srv <- sifusion:::new_server(transport, ops, fast_settings(), "x")
+  sifusion:::server_start(srv, sifusion:::now_s() + 1)
+  e <- tryCatch(sifusion:::server_step(srv, msg), fusion_limit_exceeded_error = function(e) e)
+  expect_equal(e$cap, "maxRounds")
 })
 
 test_that("source config errors", {

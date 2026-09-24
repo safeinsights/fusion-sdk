@@ -56,7 +56,7 @@ def test_happy_rounds_budget_and_complete(fake: FakeFactory, settings: Settings)
         assert src.terminal_code == "STUDY_COMPLETE"
         assert src.calls == 3
     snap = pair.leg("leg-a").snapshot()
-    assert snap["state"] == "CLOSED" and all(r["responseAcked"] for r in snap["rounds"])
+    assert snap["state"] == "CLOSED" and all(r["responseDelivered"] for r in snap["rounds"])
 
 
 def test_context_manager_completes_only_on_clean_exit(fake: FakeFactory, settings: Settings) -> None:
@@ -136,7 +136,7 @@ def test_round_timeout_abandons_and_peer_stays_usable(fake: FakeFactory, setting
             peer.request("total", {}, timeout=0.4)
         assert exc.value.reissues == 1 and exc.value.correlation_id and 0.8 <= time.monotonic() - t0 < 3
         assert not peer.in_flight and peer.state == "CHANNEL_UP"
-        # The abandoned round was released at the tunnel (T7); the next round works.
+        # The abandoned round was released at the tunnel; the next round works.
         r = peer.request("total", {})
         assert r.is_table
         time.sleep(3.2)  # the held query is eventually delivered and answered; nobody is listening
@@ -194,7 +194,9 @@ def test_remote_error_envelope_raises_remote_error_and_peer_stays_usable(fake: F
         assert peer.request("counts_by_group", {}).to_records() == [{"grade": "9", "n": 1}]
 
 
-def test_undecodable_response_is_acked_and_raises_protocol_error(fake: FakeFactory, settings: Settings) -> None:
+def test_undecodable_response_completes_the_round_and_raises_protocol_error(
+    fake: FakeFactory, settings: Settings
+) -> None:
     pair = fake("happy")
     replies: list[Any] = [
         {"not": "an envelope"},
@@ -210,7 +212,16 @@ def test_undecodable_response_is_acked_and_raises_protocol_error(fake: FakeFacto
             peer.request("total", {})
         assert peer.request("total", {}).is_table
     snap = pair.leg("leg-a").snapshot()
-    assert all(r["responseAcked"] for r in snap["rounds"]) and len(snap["rounds"]) == 3
+    assert all(r["responseDelivered"] for r in snap["rounds"]) and len(snap["rounds"]) == 3
+
+
+def test_rejected_request_raises_protocol_error(fake: FakeFactory, settings: Settings) -> None:
+    pair = fake("happy", max_body_bytes=400)
+    with source(pair):
+        fusion = connect(pair, settings)
+        with pytest.raises(ProtocolError, match="413"):
+            fusion.peer().request("total", {"pad": "x" * 500})
+        assert fusion.peer().request("total", {}).is_table  # the peer stays usable
 
 
 def test_limit_exceeded_is_terminal_for_the_peer(fake: FakeFactory, settings: Settings) -> None:
@@ -299,6 +310,6 @@ def test_config_errors(fake: FakeFactory, settings: Settings) -> None:
     env["FUSION_TUNNEL_TOKEN"] = pair.endpoints[0].source.token
     with pytest.raises(ConfigError, match="role"):
         Fusion.connect(env, settings=settings)
-    old = fake("happy", api_version="2.1.0")
+    old = fake("happy", api_version="1.9.0")
     with pytest.raises(ConfigError, match="major"):
         connect(old, settings)

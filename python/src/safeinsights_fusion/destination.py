@@ -1,6 +1,6 @@
 """Destination side: `Fusion.connect()`, one `Peer` per leg, `peer.request()` and `fusion.complete()`.
 
-Behavioral specification: plan §3 "Destination request() lifecycle"; liveness policy: ADR 0004.
+Liveness policy: ADR 0004. A round is submit → long-poll; the delivered response is the acknowledgement.
 """
 
 from __future__ import annotations
@@ -15,11 +15,10 @@ from typing import TYPE_CHECKING, Any
 from . import _log
 from ._config import Settings, TunnelConfig, read_role, read_tunnels
 from ._envelope import EnvelopeError, ResponseEnvelope, Table, canonical_bytes, decode, encode_query, is_table
-from ._http import Backoff
 from ._transport import (
-    EMPTY,
     READY_STATE,
     TERMINAL_STATES,
+    Backoff,
     Budget,
     Delivered,
     Info,
@@ -27,7 +26,9 @@ from ._transport import (
     Terminal,
     Transport,
     UnknownCorrelation,
+    log_budget,
     retry_until,
+    terminal_failure,
 )
 from ._tunnel import TunnelClient
 from .errors import (
@@ -39,14 +40,13 @@ from .errors import (
     RemoteError,
     RoundTimeoutError,
     TerminalError,
-    terminal_error,
 )
 
 if TYPE_CHECKING:
     import pandas as pd
 
 JSON = Any
-API_MAJOR = 1
+API_MAJOR = 2
 
 
 @dataclass(frozen=True)
@@ -116,9 +116,7 @@ def wait_ready(
                 )
                 return info
             if state in TERMINAL_STATES:
-                code = TERMINAL_STATES[state]
-                _log.event("session.terminal", logging.ERROR, peer=label, code=code)
-                raise terminal_error(code, f"tunnel is already {state}", peer=label)
+                raise terminal_failure(Terminal(TERMINAL_STATES[state], f"tunnel is already {state}"), label)
         _log.event("ready.wait", peer=label, state=state, attempt=attempt)
         now = time.monotonic()
         if now >= deadline:
@@ -144,7 +142,6 @@ class Peer:
         self._lock = threading.Lock()
         self._terminal: TerminalError | None = None
         self._budget: Budget | None = None
-        self._abandoned: str | None = None
         self.closed = False
 
     def __repr__(self) -> str:
@@ -167,7 +164,7 @@ class Peer:
         return self._lock.locked()
 
     def budget(self) -> Budget | None:
-        """The last budget hint seen on this leg (ask T2)."""
+        """The last budget hint seen on this leg."""
         return self._budget
 
     def info(self) -> PeerInfo:
@@ -180,17 +177,15 @@ class Peer:
             raise ConcurrencyError("complete() was already called on this peer", peer=self.name)
 
     def _go_terminal(self, t: Terminal) -> TerminalError:
-        err = terminal_error(t.code, t.message, t.detail, peer=self.name)
-        self._terminal = err
-        _log.event("session.terminal", logging.ERROR, peer=self.name, code=t.code)
-        return err
+        self._terminal = terminal_failure(t, self.name)
+        return self._terminal
 
     # -- the round --
 
     def request(
         self, operation: str, params: Mapping[str, Any] | None = None, *, timeout: float | None = None
     ) -> Response:
-        """Run one round: submit → long-poll → ACK → decode. Blocks until a response, a typed error, or the round timeout.
+        """Run one round: submit → long-poll → decode. Blocks until a response, a typed error, or the round timeout.
 
         `timeout` is the per-attempt round timeout in seconds (default FUSION_ROUND_TIMEOUT_S); the SDK re-issues
         the same correlationId up to FUSION_ROUND_MAX_REISSUES times before raising RoundTimeoutError.
@@ -212,70 +207,76 @@ class Peer:
         _log.event("round.start", peer=self.name, operation=operation, bytes=nbytes)
         per_attempt = s.round_timeout_s if timeout is None else float(timeout)
         started = time.monotonic()
-        attempt_deadline = started + per_attempt
-        reissues = 0
-        cid = self._submit(payload, None, attempt_deadline)
-
-        def reissue(code: str) -> None:
-            nonlocal reissues, attempt_deadline
-            if reissues >= s.round_max_reissues:
+        cid: str | None = None
+        code: str | None = None  # why the previous attempt ended: TIMEOUT | UNKNOWN_CORRELATION
+        for reissue in range(s.round_max_reissues + 1):
+            if code is not None:
                 _log.event(
-                    "round.timeout",
-                    logging.ERROR,
-                    peer=self.name,
-                    operation=operation,
-                    correlationId=cid,
-                    durationMs=_ms(started),
+                    "round.reissue", logging.WARNING, peer=self.name, correlationId=cid, reissue=reissue, code=code
                 )
-                self._abandon(cid)
-                raise RoundTimeoutError(
-                    f"round did not complete within {per_attempt:g} s after {reissues} re-issue(s)",
-                    peer=self.name,
-                    correlation_id=cid,
-                    reissues=reissues,
-                )
-            reissues += 1
-            _log.event("round.reissue", logging.WARNING, peer=self.name, correlationId=cid, reissue=reissues, code=code)
-            attempt_deadline = time.monotonic() + per_attempt
-            self._submit(payload, cid, attempt_deadline)
+            deadline = time.monotonic() + per_attempt
+            cid = self._submit(payload, cid, deadline)
+            result = self._poll(cid, deadline)
+            if isinstance(result, Delivered):
+                return self._finish(result, operation, started, nbytes)
+            code = result
+        _log.event(
+            "round.timeout",
+            logging.ERROR,
+            peer=self.name,
+            operation=operation,
+            correlationId=cid,
+            durationMs=int((time.monotonic() - started) * 1000),
+        )
+        assert cid is not None
+        self._transport.abandon(cid)
+        raise RoundTimeoutError(
+            f"round did not complete within {per_attempt:g} s after {s.round_max_reissues} re-issue(s)",
+            peer=self.name,
+            correlation_id=cid,
+            reissues=s.round_max_reissues,
+        )
 
-        retry_attempt = 0
-        while True:
-            remaining = attempt_deadline - time.monotonic()
-            if remaining <= 0:
-                reissue("TIMEOUT")
-                retry_attempt = 0
-                continue
+    def _submit(self, payload: JSON, correlation_id: str | None, deadline: float) -> str:
+        result = retry_until(
+            lambda: self._transport.submit(payload, correlation_id),
+            deadline=deadline,
+            backoff=self._backoff,
+            peer=self.name,
+            what="submit",
+        )
+        if isinstance(result, Terminal):
+            raise self._go_terminal(result)
+        return result
+
+    def _poll(self, cid: str, deadline: float) -> Delivered | str:
+        """Long-poll until the response arrives, or the attempt ends with TIMEOUT or UNKNOWN_CORRELATION."""
+        s = self._settings
+
+        def once() -> Delivered | Terminal | object:
+            hold = min(s.poll_http_timeout_s, max(deadline - time.monotonic(), 1.0))
+            return self._transport.poll_response(cid, timeout_s=hold)
+
+        while time.monotonic() < deadline:
             try:
-                result = self._transport.poll_response(cid, timeout_s=min(s.poll_http_timeout_s, max(remaining, 1.0)))
+                result = retry_until(once, deadline=deadline, backoff=self._backoff, peer=self.name, what="poll")
+            except RoundTimeoutError:
+                return "TIMEOUT"
             except UnknownCorrelation:
-                reissue("UNKNOWN_CORRELATION")
-                retry_attempt = 0
-                continue
-            except Retryable as exc:
-                if time.monotonic() >= attempt_deadline:
-                    continue
-                if exc.code == "BACKPRESSURE":
-                    _log.event("round.backpressure", logging.WARNING, peer=self.name, attempt=retry_attempt)
-                else:
-                    _log.event("round.retry", logging.DEBUG, peer=self.name, attempt=retry_attempt, code=exc.code)
-                time.sleep(min(self._backoff.delay(retry_attempt), max(0.0, attempt_deadline - time.monotonic())))
-                retry_attempt += 1
-                continue
-            if result is EMPTY:
-                continue
+                return "UNKNOWN_CORRELATION"
             if isinstance(result, Terminal):
                 raise self._go_terminal(result)
-            assert isinstance(result, Delivered)
-            return self._finish(result, operation, started, nbytes)
+            if isinstance(result, Delivered):
+                return result
+        return "TIMEOUT"
 
     def _finish(self, delivered: Delivered, operation: str, started: float, query_bytes: int) -> Response:
-        # ACK first, even if the payload turns out undecodable: otherwise it is redelivered until dead-lettered.
-        self._ack(delivered.message_id)
         if delivered.budget is not None:
             self._budget = delivered.budget
         try:
             env = decode(delivered.payload)
+            if not isinstance(env, ResponseEnvelope):
+                raise EnvelopeError("expected a response envelope, got a query")
         except EnvelopeError as exc:
             _log.event(
                 "round.protocol_error",
@@ -285,15 +286,6 @@ class Peer:
                 messageId=delivered.message_id,
             )
             raise ProtocolError(f"response envelope is invalid: {exc.message}", peer=self.name) from None
-        if not isinstance(env, ResponseEnvelope):
-            _log.event(
-                "round.protocol_error",
-                logging.ERROR,
-                peer=self.name,
-                correlationId=delivered.correlation_id,
-                messageId=delivered.message_id,
-            )
-            raise ProtocolError("expected a response envelope, got a query", peer=self.name)
         duration = time.monotonic() - started
         if env.error is not None:
             _log.event(
@@ -306,7 +298,6 @@ class Peer:
             )
             raise RemoteError(env.error.code, env.error.message, env.error.detail, peer=self.name, operation=operation)
         resp_bytes = canonical_bytes(delivered.payload)
-        fields = self._budget.log_fields() if self._budget else {}
         _log.event(
             "round.complete",
             peer=self.name,
@@ -315,14 +306,10 @@ class Peer:
             messageId=delivered.message_id,
             bytes=resp_bytes,
             durationMs=int(duration * 1000),
-            roundsUsed=fields.get("roundsUsed"),
-            roundsMax=fields.get("roundsMax"),
+            roundsUsed=self._budget.rounds_used if self._budget else None,
+            roundsMax=self._budget.rounds_max if self._budget else None,
         )
-        if self._budget is not None:
-            for name, used, cap in self._budget.near_limit():
-                _log.event(
-                    "budget.near_limit", logging.WARNING, peer=self.name, **{f"{name}Used": used, f"{name}Max": cap}
-                )
+        log_budget(self.name, self._budget)
         return Response(
             env.body,
             operation,
@@ -333,65 +320,6 @@ class Peer:
             resp_bytes,
             duration,
         )
-
-    def _submit(self, payload: JSON, correlation_id: str | None, deadline: float) -> str:
-        def call() -> str | Terminal:
-            return self._transport.submit(payload, correlation_id)
-
-        try:
-            result = retry_until(call, deadline=deadline, backoff=self._backoff, peer=self.name, what="submit")
-        except ConcurrencyError as exc:
-            stale = getattr(exc, "correlation_id", None)
-            if correlation_id is None and self._abandoned is not None and stale in (None, self._abandoned):
-                self._drain_abandoned()
-                result = retry_until(call, deadline=deadline, backoff=self._backoff, peer=self.name, what="submit")
-            else:
-                raise
-        if isinstance(result, Terminal):
-            raise self._go_terminal(result)
-        return result
-
-    def _abandon(self, correlation_id: str) -> None:
-        """Best effort T7; fall back to draining on the next 409."""
-        try:
-            done = self._transport.abandon(correlation_id)
-        except FusionError:
-            done = False
-        if not done:
-            self._abandoned = correlation_id
-
-    def _drain_abandoned(self) -> None:
-        cid = self._abandoned
-        assert cid is not None
-        try:
-            result = self._transport.poll_response(cid, timeout_s=self._settings.poll_http_timeout_s)
-        except UnknownCorrelation:
-            self._abandoned = None
-            return
-        except Retryable as exc:
-            raise ConcurrencyError(
-                f"abandoned round {cid} is still in flight at the tunnel ({exc.code})", peer=self.name
-            ) from None
-        if isinstance(result, Delivered):
-            self._ack(result.message_id)
-            self._abandoned = None
-            return
-        if isinstance(result, Terminal):
-            raise self._go_terminal(result)
-        raise ConcurrencyError(f"abandoned round {cid} is still in flight at the tunnel", peer=self.name)
-
-    def _ack(self, message_id: str) -> None:
-        deadline = time.monotonic() + max(5.0, self._settings.http_timeout_s * 3)
-        try:
-            retry_until(
-                lambda: self._transport.ack(message_id),
-                deadline=deadline,
-                backoff=self._backoff,
-                peer=self.name,
-                what="ack",
-            )
-        except RoundTimeoutError:
-            _log.event("ack.failed", logging.WARNING, peer=self.name, messageId=message_id)
 
     def _complete(self) -> str:
         """Send CLOSE for this leg. Returns the per-leg outcome code."""
@@ -517,10 +445,6 @@ class Fusion:
         # CLOSE only on a clean exit: an exception means the analysis did not finish.
         if exc_type is None and not self.completed:
             self.complete()
-
-
-def _ms(since: float) -> int:
-    return int((time.monotonic() - since) * 1000)
 
 
 __all__ = ["Fusion", "Peer", "PeerInfo", "Response", "wait_ready"]

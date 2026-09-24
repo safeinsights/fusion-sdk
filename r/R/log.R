@@ -7,11 +7,11 @@
 
 log_levels <- c(DEBUG = 10L, INFO = 20L, WARNING = 30L, WARN = 30L, ERROR = 40L)
 
+# Exactly spec/log-events.md "Allowed fields" (a test checks).
 allowed_log_fields <- c(
   "peer", "legId", "role", "operation", "operations", "correlationId", "messageId", "bytes", "durationMs",
-  "attempt", "reissue", "state", "code", "guard", "limit", "observed", "roundsUsed", "roundsMax",
-  "responseBytesUsed", "responseBytesMax", "queryBytesUsed", "queryBytesMax", "roundsPerHourUsed",
-  "roundsPerHourMax", "maxDistinctPersonIds", "minGroupSize", "endpointCount", "apiVersion", "cap", "label"
+  "attempt", "reissue", "state", "code", "guard", "limit", "observed", "cap", "roundsUsed", "roundsMax",
+  "maxDistinctPersonIds", "minGroupSize", "endpointCount", "apiVersion"
 )
 
 fusion_log_configure <- function(level = "INFO") {

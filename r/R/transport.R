@@ -3,7 +3,10 @@
 # Nothing above this layer knows about URLs, tokens or status codes.
 
 ready_state <- "CHANNEL_UP"
-terminal_states <- c(CLOSED = "STUDY_COMPLETE", ERRORED = "SESSION_ERRORED", LIMIT_EXCEEDED = "LIMIT_EXCEEDED")
+# Tunnel states that end the leg, mapped to the terminal code the SDK reports for them.
+terminal_states <- c(CLOSING = "STUDY_COMPLETE", CLOSED = "STUDY_COMPLETE", ERRORED = "SESSION_ERRORED", LIMIT_EXCEEDED = "LIMIT_EXCEEDED")
+
+# ---- budget ----------------------------------------------------------------------------------------
 
 budget_from_json <- function(obj) {
   if (!is_json_object(obj)) {
@@ -31,19 +34,35 @@ print.fusion_budget <- function(x, ...) {
   invisible(x)
 }
 
-# list of c(name, used, max) for every capped counter at or above `fraction` of its cap.
+# list(cap, observed, limit) for every capped counter at or above `fraction` of its cap; caps carry the
+# manifest names the tunnel uses in LIMIT_EXCEEDED details.
 budget_near_limit <- function(b, fraction = 0.9) {
   out <- list()
-  for (pair in list(
-    c("rounds", "rounds_used", "rounds_max"), c("responseBytes", "response_bytes_used", "response_bytes_max"),
-    c("queryBytes", "query_bytes_used", "query_bytes_max"), c("roundsPerHour", "rounds_per_hour_used", "rounds_per_hour_max")
+  for (row in list(
+    c("maxRounds", "rounds_used", "rounds_max"),
+    c("maxCumulativeResponsePlaintextBytes", "response_bytes_used", "response_bytes_max"),
+    c("maxCumulativeQueryPlaintextBytes", "query_bytes_used", "query_bytes_max"),
+    c("maxRoundsPerHour", "rounds_per_hour_used", "rounds_per_hour_max")
   )) {
-    used <- b[[pair[2]]]
-    cap <- b[[pair[3]]]
-    if (!is.null(used) && !is.null(cap) && cap > 0 && used >= fraction * cap) out[[length(out) + 1]] <- list(name = pair[1], used = used, max = cap)
+    used <- b[[row[2]]]
+    limit <- b[[row[3]]]
+    if (!is.null(used) && !is.null(limit) && limit > 0 && used >= fraction * limit) {
+      out[[length(out) + 1]] <- list(cap = row[1], observed = used, limit = limit)
+    }
   }
   out
 }
+
+# Warn once per capped counter that has passed 90 % of its cap.
+log_budget <- function(peer, b) {
+  if (is.null(b)) {
+    return(invisible(NULL))
+  }
+  for (n in budget_near_limit(b)) fusion_log("budget.near_limit", "WARNING", peer = peer, cap = n$cap, limit = n$limit, observed = n$observed)
+  invisible(NULL)
+}
+
+# ---- results ---------------------------------------------------------------------------------------
 
 terminal_result <- function(body) {
   code <- body$code
@@ -53,6 +72,13 @@ terminal_result <- function(body) {
     kind = "terminal", code = code, message = if (is.character(body$message)) body$message else "",
     detail = if (is_json_object(detail)) detail else NULL
   )
+}
+
+# Log `session.terminal` and build (not signal) the typed error for a terminal result. STUDY_COMPLETE is
+# not an error and is handled by the callers before they get here.
+terminal_failure <- function(t, peer) {
+  fusion_log("session.terminal", "ERROR", peer = peer, code = t$code)
+  fusion_terminal_condition(t$code, t$message, t$detail, peer = peer)
 }
 
 delivered_result <- function(body, path, peer) {
@@ -70,25 +96,70 @@ api_major <- function(version) {
   if (grepl("^[0-9]+$", head)) as.integer(head) else NA_integer_
 }
 
+# ---- HTTP ------------------------------------------------------------------------------------------
+
+invalid_json <- structure(list(), class = "fusion_invalid_json")
+
+parse_json_body <- function(raw) {
+  if (length(raw) == 0) {
+    return(NULL)
+  }
+  text <- rawToChar(raw)
+  Encoding(text) <- "UTF-8"
+  tryCatch(jsonlite::fromJSON(text, simplifyVector = FALSE), error = function(e) invalid_json)
+}
+
+is_invalid_json <- function(x) inherits(x, "fusion_invalid_json")
+
+is_terminal_body <- function(body) is.list(body) && isTRUE(body$terminal)
+
+# Minimal HTTP client over curl: bearer auth, explicit per-call timeouts, JSON both ways, no proxies (the
+# tunnel is a sidecar) and content-free errors. `request(method, path, body, timeout_s)` -> list(status, body).
+fusion_http_client <- function(endpoint, token, default_timeout_s = 10) {
+  endpoint <- sub("/+$", "", endpoint)
+  request <- function(method, path, body = NULL, timeout_s = NULL) {
+    timeout <- if (is.null(timeout_s)) default_timeout_s else timeout_s
+    h <- curl::new_handle()
+    headers <- c(Authorization = paste("Bearer", token), Accept = "application/json")
+    curl::handle_setopt(h,
+      customrequest = method, timeout_ms = as.integer(timeout * 1000),
+      connecttimeout_ms = as.integer(min(timeout, 10) * 1000), noproxy = "*"
+    )
+    if (!is.null(body)) {
+      data <- charToRaw(as.character(body))
+      headers <- c(headers, `Content-Type` = "application/json; charset=utf-8")
+      curl::handle_setopt(h, postfields = data, postfieldsize = length(data))
+    } else if (method %in% c("POST", "PUT")) {
+      curl::handle_setopt(h, postfields = raw(0), postfieldsize = 0L)
+    }
+    curl::handle_setheaders(h, .list = as.list(headers))
+    res <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, path), handle = h),
+      error = function(e) NULL
+    )
+    if (is.null(res)) fusion_retryable("TRANSPORT")
+    list(status = as.integer(res$status_code), body = parse_json_body(res$content))
+  }
+  list(endpoint = endpoint, request = request)
+}
+
 # Typed wrapper of the local API. Statuses are mapped once, here, per spec/errors.json.
 tunnel_transport <- function(endpoint, token, peer, http_timeout_s = 10) {
   http <- fusion_http_client(endpoint, token, default_timeout_s = http_timeout_s)
 
   call <- function(method, path, body = NULL, timeout_s = NULL) {
-    resp <- tryCatch(http$request(method, path, if (is.null(body)) NULL else encode_json(body), timeout_s = timeout_s),
-      fusion_transport_error = function(e) fusion_retryable("TRANSPORT")
-    )
+    resp <- http$request(method, path, if (is.null(body)) NULL else encode_json(body), timeout_s = timeout_s)
     if (is_invalid_json(resp$body)) fusion_protocol_error(sprintf("%s %s: tunnel returned a non-JSON body (status %d)", method, path, resp$status), peer = peer)
     s <- resp$status
+    code <- if (is_json_object(resp$body) && is.character(resp$body$code)) resp$body$code else "?"
     if (s == 401L) fusion_config_error("bearer token rejected by the tunnel (401)", peer = peer)
     if (s == 403L) fusion_config_error(sprintf("%s %s is not allowed for this role (403): check FUSION_ROLE", method, path), peer = peer)
     if (s == 409L) {
-      fusion_concurrency_error("another round is in flight at the tunnel (409)",
-        peer = peer,
-        correlation_id = if (is_json_object(resp$body)) resp$body$correlationId else NULL
+      cid <- if (is_json_object(resp$body) && is.character(resp$body$correlationId)) resp$body$correlationId else NULL
+      fusion_concurrency_error(sprintf("%s %s: 409 CONFLICT (another round is in flight, or the round is unknown)", method, path),
+        peer = peer, correlation_id = cid
       )
     }
-    if (s == 422L) fusion_protocol_error(sprintf("%s %s: tunnel rejected the request schema (422)", method, path), peer = peer)
+    if (s %in% c(400L, 413L, 422L)) fusion_protocol_error(sprintf("%s %s: tunnel rejected the request (%d %s)", method, path, s, code), peer = peer)
     if (s == 429L) fusion_retryable("BACKPRESSURE")
     if (s == 503L) fusion_retryable("NOT_READY")
     if (s >= 500L) fusion_retryable("SERVER_ERROR")
@@ -118,7 +189,7 @@ tunnel_transport <- function(endpoint, token, peer, http_timeout_s = 10) {
       return(terminal_result(resp$body))
     }
     cid <- if (is_json_object(resp$body)) resp$body$correlationId else NULL
-    if (!resp$status %in% c(200L, 202L) || !is.character(cid)) {
+    if (resp$status != 202L || !is.character(cid)) {
       fusion_protocol_error(sprintf("POST /v1/request returned status %d without a correlationId", resp$status), peer = peer)
     }
     cid
@@ -138,9 +209,10 @@ tunnel_transport <- function(endpoint, token, peer, http_timeout_s = 10) {
     delivered_result(resp$body, path, peer)
   }
 
+  # Best effort: one DELETE, any failure ignored (the round is already lost to the caller).
   abandon <- function(correlation_id) {
-    resp <- tryCatch(call("DELETE", paste0("/v1/request/", correlation_id)), fusion_retryable = function(e) NULL)
-    !is.null(resp) && resp$status %in% c(200L, 202L, 204L)
+    tryCatch(call("DELETE", paste0("/v1/request/", correlation_id)), condition = function(e) NULL)
+    invisible(NULL)
   }
 
   next_message <- function(timeout_s) {
@@ -160,22 +232,8 @@ tunnel_transport <- function(endpoint, token, peer, http_timeout_s = 10) {
     if (is_terminal_body(resp$body)) {
       return(terminal_result(resp$body))
     }
-    if (resp$status == 400L) fusion_protocol_error("POST /v1/messages: inReplyTo does not match a delivered query", peer = peer)
-    if (!resp$status %in% c(200L, 202L)) fusion_protocol_error(sprintf("POST /v1/messages returned status %d", resp$status), peer = peer)
+    if (resp$status != 202L) fusion_protocol_error(sprintf("POST /v1/messages returned status %d", resp$status), peer = peer)
     if (is_json_object(resp$body)) budget_from_json(resp$body$budget) else NULL
-  }
-
-  ack <- function(message_id) {
-    resp <- call("POST", paste0("/v1/messages/", message_id, "/ack"))
-    if (resp$status == 404L) {
-      fusion_log("ack.unknown", "WARNING", peer = peer, messageId = message_id)
-      return(invisible(NULL))
-    }
-    if (is_terminal_body(resp$body)) {
-      return(invisible(NULL))
-    }
-    if (!resp$status %in% c(200L, 202L, 204L)) fusion_protocol_error(sprintf("ack returned status %d", resp$status), peer = peer)
-    invisible(NULL)
   }
 
   complete <- function() {
@@ -183,22 +241,30 @@ tunnel_transport <- function(endpoint, token, peer, http_timeout_s = 10) {
     if (is_terminal_body(resp$body)) {
       return(terminal_result(resp$body))
     }
-    if (!resp$status %in% c(200L, 202L, 204L)) fusion_protocol_error(sprintf("POST /v1/complete returned status %d", resp$status), peer = peer)
+    if (resp$status != 202L) fusion_protocol_error(sprintf("POST /v1/complete returned status %d", resp$status), peer = peer)
     NULL
   }
 
   structure(
     list(
       endpoint = endpoint, peer = peer, info = info, submit = submit, poll_response = poll_response, abandon = abandon,
-      next_message = next_message, post_response = post_response, ack = ack, complete = complete
+      next_message = next_message, post_response = post_response, complete = complete
     ),
     class = "fusion_transport"
   )
 }
 
+# ---- retry and readiness -----------------------------------------------------------------------------
+
 now_s <- function() as.numeric(proc.time()[["elapsed"]])
 
-# Call `fn` until it stops signalling fusion_retryable or the `deadline` (now_s() clock) passes.
+# Exponential backoff with full jitter, in seconds.
+backoff_delay <- function(attempt, base_ms, max_ms) {
+  cap <- min(max_ms, base_ms * 2^min(max(0, attempt), 30))
+  stats::runif(1, 0, cap) / 1000
+}
+
+# Call `fn` until it stops signalling fusion_retryable or the `deadline` (now_s() clock; Inf = never) passes.
 retry_until <- function(fn, deadline, settings, peer, what) {
   attempt <- 0L
   repeat {
@@ -232,9 +298,8 @@ wait_ready <- function(transport, deadline, settings, label) {
         return(info)
       }
       if (state %in% names(terminal_states)) {
-        code <- terminal_states[[state]]
-        fusion_log("session.terminal", "ERROR", peer = label, code = code)
-        stop(fusion_terminal_condition(code, sprintf("tunnel is already %s", state), peer = label))
+        t <- list(code = terminal_states[[state]], message = sprintf("tunnel is already %s", state), detail = NULL)
+        stop(terminal_failure(t, label))
       }
     }
     fusion_log("ready.wait", "INFO", peer = label, state = state, attempt = attempt)

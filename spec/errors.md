@@ -20,13 +20,13 @@ The list is closed for envelope `v: 1`. A destination that receives an unknown c
 
 ## Terminal codes (on the local API)
 
-Delivered by the tunnel on any `/v1/*` route (except `/v1/info`) as `200 {"terminal": true, "code": …}` once the leg has ended (ask T5).
+Delivered by the tunnel on any `/v1/*` route (except `/v1/info`) as `200 {"terminal": true, "code": …}` once the leg has ended.
 
 | Code | Meaning | Destination `request()` | Source `serve()` |
 | :-- | :-- | :-- | :-- |
 | `STUDY_COMPLETE` | CLOSE completed | n/a (the destination initiated it) | returns normally |
-| `SESSION_ERRORED` | dead-letter, un-ACKed expiry, relay closed the session, tunnel `ERRORED` | raises `SessionError` | raises `SessionError` |
-| `LIMIT_EXCEEDED` | a source-approved cap was breached on this leg | raises `LimitExceededError` | raises `LimitExceededError` |
+| `SESSION_ERRORED` | the relay closed the session, or the tunnel entered `ERRORED` | raises `SessionError` | raises `SessionError` |
+| `LIMIT_EXCEEDED` | a source-approved cap was breached on this leg; `detail` = `{cap, limit, observed}` | raises `LimitExceededError` (`.cap`) | raises `LimitExceededError` (`.cap`) |
 
 After a terminal code every further call on that **peer** raises the same error immediately, without touching the tunnel. Other peers are unaffected; `complete()` still fans out to them.
 
@@ -37,13 +37,13 @@ After a terminal code every further call on that **peer** raises the same error 
 | `FusionError` | `fusion_error` | — | base; never raised directly |
 | `ConfigError` | `fusion_config_error` | yes (never connected) | env missing or malformed; endpoint not `http://127.0.0.1`/`localhost`/a private hostname on the enclave network; incompatible `apiVersion`; `401`; `403` (wrong role — a programming error, never retried) |
 | `NotReadyError` | `fusion_not_ready_error` | yes | readiness timeout waiting for `CHANNEL_UP` |
-| `ConcurrencyError` | `fusion_concurrency_error` | no | second in-flight request on a peer; `409` from the tunnel |
+| `ConcurrencyError` (`correlation_id`) | `fusion_concurrency_error` | no | second in-flight request on a peer; `409` from `POST /v1/request` |
 | `RoundTimeoutError` | `fusion_round_timeout_error` | no | round timeout after `FUSION_ROUND_MAX_REISSUES` re-issues; the round is abandoned, the peer stays usable |
 | `RemoteError` (`code`, `message`, `detail`) | `fusion_remote_error` | no | the source returned an error envelope |
 | `TerminalError` | `fusion_terminal_error` | yes | base of the two below; never raised directly |
-| `LimitExceededError` | `fusion_limit_exceeded_error` | **yes** | tunnel reported `LIMIT_EXCEEDED` |
+| `LimitExceededError` (`cap`) | `fusion_limit_exceeded_error` | **yes** | tunnel reported `LIMIT_EXCEEDED`; `cap` is `detail.cap` |
 | `SessionError` (`code`) | `fusion_session_error` | **yes** | tunnel reported `SESSION_ERRORED` |
-| `ProtocolError` | `fusion_protocol_error` | no | undecodable local-API response or envelope (the message is still ACKed so it is not redelivered); `422` |
+| `ProtocolError` | `fusion_protocol_error` | no | undecodable local-API response or envelope; `400`, `413` or `422` from the tunnel |
 
 R condition objects carry the same fields as the Python classes (`code`, `message`, `detail`, `peer`) and inherit from `error` and `condition`, so `tryCatch(fusion_remote_error = function(e) …)` works.
 
@@ -56,15 +56,17 @@ Every error message is **content-free**: it may name the peer, the operation, a 
 | `200` with `terminal: true` | per the terminal table |
 | `200` / `202` | proceed |
 | `204` on a long-poll route | empty hold → re-poll |
-| `204` on ack | proceed |
+| `204` on `DELETE /v1/request/{id}` | abandoned |
+| `400` | `ProtocolError` (SDK/tunnel contract drift) |
 | `401` | `ConfigError` (bad bearer token) — never retried |
-| `403` | direction violation → `ConfigError` (wrong role) — never retried |
-| `404` on `GET /v1/responses/{id}` | the destination tunnel restarted and lost the correlation → re-issue with the **same** `correlationId` (ask T1) |
-| `404` on ack | log `ack.unknown`, proceed |
-| `409` | `ConcurrencyError` |
-| `422` | `ProtocolError` (SDK/tunnel contract drift) |
+| `403` | wrong role → `ConfigError` — never retried |
+| `404` on `GET /v1/responses/{id}` | the destination tunnel restarted and lost the correlation → re-issue with the **same** `correlationId` |
+| `409` on `POST /v1/request` | `ConcurrencyError` carrying the in-flight `correlationId` |
+| `409` on `POST /v1/messages` | the tunnel no longer knows the round: log `round.protocol_error`, drop the response, back to the loop |
+| `413` | `ProtocolError` (the request body is too large for the tunnel) |
+| `422` | `ProtocolError` |
 | `429` `BACKPRESSURE` | backoff + retry within the round timeout |
-| `503` not ready | readiness wait before a round; backoff + retry during one |
+| `503` `NOT_READY` | readiness wait before a round; backoff + retry during one |
 | `5xx`, connection refused/reset, timeout on a non-long-poll call | backoff + retry, bounded by the round timeout |
 
-Retryable conditions never reach researcher code unless the round timeout is exhausted, in which case they surface as `RoundTimeoutError`.
+Retryable conditions never reach researcher code unless the round timeout is exhausted, in which case they surface as `RoundTimeoutError`. The source loop has no round timeout and retries forever.

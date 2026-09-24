@@ -5,7 +5,7 @@ The SafeInsights **Fusion SDK** for Python: the researcher-facing client for the
 - **Destination side:** `Fusion.connect()` discovers the per-job Fusion Tunnel App(s) from the environment and exposes one peer handle per leg; `peer.request(operation, params)` is the blocking round facade.
 - **Source side:** register Data-Partner-approved operation handlers with `@operations.register(...)` and call `serve()`.
 
-Researcher code never sees a URL, a token, a `correlationId`, an ACK or a retransmission.
+Researcher code never sees a URL, a token, a `correlationId` or a retransmission.
 
 Runtime dependencies: **none** (stdlib only). Optional extra `pandas` adds `Response.to_pandas()` and DataFrame return values from handlers.
 

@@ -1,4 +1,4 @@
-"""In-process simulator for the SafeInsights IDE / CRATE (plan Phase 6, decision A15).
+"""In-process simulator for the SafeInsights IDE / CRATE.
 
 Runs a source handler set and a destination analysis in one process with no tunnel and no HTTP.
 The simulator is an implementation of the same internal `Transport` interface the real tunnel client
@@ -39,7 +39,7 @@ from .source import OperationRegistry, Server
 
 JSON = Any
 T = TypeVar("T")
-API_VERSION = "1.0.0"
+API_VERSION = "2.0.0"
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,8 @@ class SimFaults:
     drop_response_rounds: the response for round n is not delivered until the SDK re-issues the same
         correlationId (exercises RoundTimeoutError handling when combined with a short `timeout`).
     error_after_round: the leg becomes SESSION_ERRORED after round n completes.
-    max_rounds / max_response_bytes_per_round: caps the simulated source tunnel enforces (LIMIT_EXCEEDED).
+    max_rounds / max_response_bytes_per_round: caps the simulated source tunnel enforces (LIMIT_EXCEEDED
+        with `cap` maxRounds / maxResponsePlaintextBytesPerRound).
     """
 
     drop_response_rounds: frozenset[int] = frozenset()
@@ -66,7 +67,7 @@ class _Round:
     response: JSON = None
     response_message_id: str | None = None
     deliverable: bool = False
-    acked: bool = False
+    delivered: bool = False  # the destination has received the response (delivery is the acknowledgement)
 
 
 @dataclass
@@ -138,8 +139,8 @@ class _SourceView:
     def poll_response(self, correlation_id: str, timeout_s: float) -> Delivered | Terminal | Empty:
         raise NotImplementedError("a source never polls responses")
 
-    def abandon(self, correlation_id: str) -> bool:
-        return False
+    def abandon(self, correlation_id: str) -> None:
+        raise NotImplementedError("a source never abandons")
 
     def next_message(self, timeout_s: float) -> Delivered | Terminal | Empty:
         # The simulator drives Server.step() directly; the loop is never run.
@@ -155,19 +156,16 @@ class _SourceView:
         if cap is not None and nbytes > cap:
             leg.terminal = Terminal(
                 "LIMIT_EXCEEDED",
-                "response exceeds maxResponseBytesPerRound",
-                {"cap": "maxResponseBytesPerRound", "limit": cap, "observed": nbytes},
+                "response exceeds maxResponsePlaintextBytesPerRound",
+                {"cap": "maxResponsePlaintextBytesPerRound", "limit": cap, "observed": nbytes},
             )
             return leg.terminal
         rnd.response = _wire(payload)
-        rnd.response_message_id = uuid.uuid4().hex
+        rnd.response_message_id = str(uuid.uuid4())
         rnd.deliverable = rnd.round_no not in leg.faults.drop_response_rounds
         leg.response_bytes_used += nbytes
         leg.rounds_used += 1
         return leg.budget()
-
-    def ack(self, message_id: str) -> None:
-        return None
 
     def complete(self) -> Terminal | None:
         raise NotImplementedError("a source never completes")
@@ -202,11 +200,13 @@ class _DestinationView:
                 {"cap": "maxRounds", "limit": leg.faults.max_rounds, "observed": leg.rounds_used + 1},
             )
             return leg.terminal
-        rnd = _Round(correlation_id or uuid.uuid4().hex, leg.round_counter, payload)
+        rnd = _Round(correlation_id or str(uuid.uuid4()), leg.round_counter, payload)
         leg.rounds[rnd.correlation_id] = rnd
         leg.query_bytes_used += canonical_bytes(payload)
-        # Deliver to the source RC now: ACK, memo, guards, handler, encode, post_response.
-        outcome = self._server.step(Delivered(uuid.uuid4().hex, rnd.correlation_id, _wire(payload), leg.budget(), None))
+        # Deliver to the source RC now: memo, guards, handler, encode, post_response.
+        outcome = self._server.step(
+            Delivered(str(uuid.uuid4()), rnd.correlation_id, _wire(payload), leg.budget(), None)
+        )
         if outcome == "STUDY_COMPLETE":
             leg.closed = True
         return rnd.correlation_id
@@ -216,31 +216,24 @@ class _DestinationView:
         if leg.terminal is not None:
             return leg.terminal
         rnd = leg.rounds.get(correlation_id)
-        if rnd is not None and rnd.deliverable and rnd.response_message_id is not None and not rnd.acked:
+        if rnd is not None and rnd.deliverable and rnd.response_message_id is not None and not rnd.delivered:
+            rnd.delivered = True
+            if leg.faults.error_after_round == rnd.round_no:
+                leg.terminal = Terminal("SESSION_ERRORED", "simulated session error")
             return Delivered(rnd.response_message_id, correlation_id, rnd.response, leg.budget(), None)
         time.sleep(min(timeout_s, 0.02))  # nothing to deliver yet: yield briefly instead of spinning
         return EMPTY
 
-    def abandon(self, correlation_id: str) -> bool:
+    def abandon(self, correlation_id: str) -> None:
         rnd = self._leg.rounds.get(correlation_id)
         if rnd is not None:
-            rnd.acked = True
-        return True
+            rnd.delivered = True
 
     def next_message(self, timeout_s: float) -> Delivered | Terminal | Empty:
         raise NotImplementedError("a destination never polls messages")
 
     def post_response(self, in_reply_to: str, payload: JSON) -> Budget | Terminal | None:
         raise NotImplementedError("a destination never posts responses")
-
-    def ack(self, message_id: str) -> None:
-        leg = self._leg
-        for rnd in leg.rounds.values():
-            if rnd.response_message_id == message_id:
-                rnd.acked = True
-                if leg.faults.error_after_round == rnd.round_no:
-                    leg.terminal = Terminal("SESSION_ERRORED", "simulated session error")
-                return
 
     def complete(self) -> Terminal | None:
         if self._leg.terminal is not None:

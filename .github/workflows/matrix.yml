@@ -36,6 +36,6 @@ jobs:
               run: python3 tools/run_examples.py --py-installed
             - name: Matrix (fault scenarios)
               run: |
-                  for s in backpressure transient-errors timeout-reissue restart-404 redeliver-after-ack; do
+                  for s in backpressure transient-errors timeout-reissue restart-404 redeliver-query; do
                       python3 tools/matrix.py --py-installed --no-hub --scenario "$s" --rounds 3 || exit 1
                   done

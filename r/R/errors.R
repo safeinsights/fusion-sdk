@@ -23,6 +23,7 @@ fusion_abort <- function(class, message, peer = NULL, ...) {
 
 fusion_config_error <- function(message, peer = NULL) fusion_abort("fusion_config_error", message, peer = peer)
 fusion_not_ready_error <- function(message, peer = NULL) fusion_abort("fusion_not_ready_error", message, peer = peer)
+# `correlation_id` names the in-flight round when the tunnel reported one on a 409.
 fusion_concurrency_error <- function(message, peer = NULL, correlation_id = NULL) {
   fusion_abort("fusion_concurrency_error", message, peer = peer, correlation_id = correlation_id)
 }
@@ -38,6 +39,7 @@ fusion_remote_error <- function(code, message, detail = list(), peer = NULL, ope
 }
 
 # Build (not signal) the terminal error for a terminal body; STUDY_COMPLETE is handled by callers.
+# `cap` is the manifest name of the breached cap (`detail$cap`) on LIMIT_EXCEEDED.
 fusion_terminal_condition <- function(code, message = "", detail = NULL, peer = NULL) {
   class <- if (identical(code, "LIMIT_EXCEEDED")) "fusion_limit_exceeded_error" else "fusion_session_error"
   text <- if (nzchar(message)) sprintf("%s: %s", code, message) else code

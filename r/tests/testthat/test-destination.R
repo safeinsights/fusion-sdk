@@ -113,6 +113,7 @@ test_that("RoundTimeoutError abandons the round and the peer stays usable", {
     expect_equal(sifusion::fusion_peers(fusion)$state, "CHANNEL_UP")
     expect_equal(sifusion::fusion_request(peer, "total")$body$total, 42)
     expect_true("abandon" %in% fake_log_events(fake))
+    expect_match(conditionMessage(e), "1 re-issue")
     Sys.sleep(3.2)
     expect_equal(sifusion::fusion_complete(fusion), c(`dp-a` = "OK"))
     expect_equal(child_wait(src), 0L)
@@ -143,7 +144,7 @@ test_that("remote error envelopes raise fusion_remote_error and the peer stays u
   })
 })
 
-test_that("an undecodable response is ACKed and raises fusion_protocol_error", {
+test_that("an undecodable response completes the round and raises fusion_protocol_error", {
   with_fake("happy", {
     src <- start_raw_source(fake, '{"not": "an envelope"}')
     fusion <- connect_to(fake)
@@ -151,7 +152,7 @@ test_that("an undecodable response is ACKed and raises fusion_protocol_error", {
     expect_error(sifusion::fusion_request(peer, "total"), class = "fusion_protocol_error")
     expect_error(sifusion::fusion_request(peer, "total"), class = "fusion_protocol_error")
     snap <- fake_snapshot(fake)
-    expect_true(all(vapply(snap$rounds, function(r) isTRUE(r$responseAcked), logical(1))))
+    expect_true(all(vapply(snap$rounds, function(r) isTRUE(r$responseDelivered), logical(1))))
     expect_equal(sifusion::fusion_peers(fusion)$state, "CHANNEL_UP")
     sifusion::fusion_complete(fusion)
     child_wait(src, 10)
@@ -237,7 +238,7 @@ test_that("readiness wait, readiness timeout and config errors", {
     {
       expect_error(connect_to(fake), "major", class = "fusion_config_error")
     },
-    api_version = "2.1.0"
+    api_version = "1.9.0"
   )
 })
 

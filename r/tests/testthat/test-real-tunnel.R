@@ -15,6 +15,6 @@ test_that("happy path against real tunnels", {
   }
   e <- tryCatch(sifusion::fusion_request(peer, "boom"), fusion_remote_error = function(e) e)
   expect_equal(e$code, "HANDLER_ERROR")
-  expect_equal(sifusion::fusion_complete(fusion), c(`dp-a` = "OK")[names(sifusion::fusion_complete)])
+  expect_equal(sifusion::fusion_complete(fusion), c(`dp-a` = "OK"))
   expect_equal(child_wait(src, 300), 0L)
 })

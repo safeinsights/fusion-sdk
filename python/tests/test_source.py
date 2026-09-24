@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from safeinsights_fusion import (
+    ConcurrencyError,
     ConfigError,
     Fusion,
     LimitExceededError,
@@ -26,8 +27,17 @@ from safeinsights_fusion import (
     _log,
 )
 from safeinsights_fusion import serve as serve_fn
-from safeinsights_fusion.guards import Guards, OperationSpec, check_query, check_result, distinct_count, preflight
-from safeinsights_fusion.source import ResponseMemo
+from safeinsights_fusion._transport import EMPTY, Budget, Delivered, Empty, Info, Terminal
+from safeinsights_fusion.guards import (
+    GuardRefused,
+    Guards,
+    OperationSpec,
+    check_query,
+    check_result,
+    distinct_count,
+    preflight,
+)
+from safeinsights_fusion.source import ResponseMemo, Server
 
 from .conftest import FakeFactory
 from .helpers import RawTunnel
@@ -185,14 +195,13 @@ def test_bad_params_for_a_non_envelope_query(
                 and msg["payload"]["status"] == "error"
                 and msg["payload"]["error"]["code"] == "BAD_PARAMS"
             )
-            dst.call("POST", f"/v1/messages/{msg['messageId']}/ack")
         dst.call("POST", "/v1/complete", {})
 
 
 def test_redelivered_query_is_answered_from_the_memo(
     fake: FakeFactory, settings: Settings, registry: tuple[OperationRegistry, dict[str, int]]
 ) -> None:
-    pair = fake("redeliver-after-ack")  # query 2 comes back after its ACK
+    pair = fake("redeliver-query")  # query 2 is delivered a second time
     reg, calls = registry
     with ServeThread(pair, reg, settings) as st:
         fusion = Fusion.connect(pair.env("destination"), settings=settings)
@@ -318,9 +327,9 @@ def test_limit_exceeded_and_session_errored_raise_from_serve(
         fusion = Fusion.connect(pair.env("destination"), settings=settings)
         with pytest.raises(LimitExceededError) as exc:
             fusion.peer().request("counts_by_group", {"person_ids": ["a"]})
-        assert exc.value.cap == "maxResponseBytesPerRound"
+        assert exc.value.cap == "maxResponsePlaintextBytesPerRound"
         err = st.wait()
-        assert isinstance(err, LimitExceededError) and err.cap == "maxResponseBytesPerRound"
+        assert isinstance(err, LimitExceededError) and err.cap == "maxResponsePlaintextBytesPerRound"
 
     pair = fake("session-errored")
     with ServeThread(pair, reg, settings) as st:
@@ -362,6 +371,57 @@ def test_registry_validation() -> None:
     assert len(reg) == 0
 
 
+class StubTransport:
+    """A source-side transport whose POST /v1/messages outcome is scripted."""
+
+    def __init__(self, outcome: Exception | Terminal | Budget) -> None:
+        self.outcome = outcome
+        self.posted: list[str] = []
+
+    def info(self) -> Info:
+        return Info("2.0.0", "leg-a", "dp-a", "source", "dst_to_src", "CHANNEL_UP")
+
+    def submit(self, payload: Any, correlation_id: str | None = None) -> str | Terminal:
+        raise NotImplementedError
+
+    def poll_response(self, correlation_id: str, timeout_s: float) -> Delivered | Terminal | Empty:
+        raise NotImplementedError
+
+    def abandon(self, correlation_id: str) -> None:
+        raise NotImplementedError
+
+    def next_message(self, timeout_s: float) -> Delivered | Terminal | Empty:
+        return EMPTY
+
+    def post_response(self, in_reply_to: str, payload: Any) -> Budget | Terminal | None:
+        self.posted.append(in_reply_to)
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+    def complete(self) -> Terminal | None:
+        raise NotImplementedError
+
+
+def test_409_on_respond_drops_the_round_without_raising(settings: Settings, caplog: pytest.LogCaptureFixture) -> None:
+    reg, _ = make_registry()
+    transport = StubTransport(ConcurrencyError("409", peer="dp-a", correlation_id="c1"))
+    server = Server(transport, reg, settings, label="x")
+    server.start(time.monotonic() + 1)
+    query = {"v": 1, "kind": "query", "operation": "total", "params": {}, "encoding": "json"}
+    with caplog.at_level(logging.DEBUG, logger=_log.LOGGER_NAME):
+        assert server.step(Delivered("m1", "c1", query, None, None)) is None
+    assert transport.posted == ["c1"] and "c1" not in server.memo and server.rounds_served == 0
+    assert any("round.protocol_error" in r.getMessage() for r in caplog.records)
+    # A terminal body on the post ends the leg like one on the poll.
+    transport = StubTransport(Terminal("LIMIT_EXCEEDED", "cap", {"cap": "maxRounds", "limit": 1, "observed": 2}))
+    server = Server(transport, reg, settings, label="x")
+    server.start(time.monotonic() + 1)
+    with pytest.raises(LimitExceededError) as exc:
+        server.step(Delivered("m2", "c2", query, None, None))
+    assert exc.value.cap == "maxRounds"
+
+
 def test_memo_is_an_lru() -> None:
     memo = ResponseMemo(2)
     memo.put("a", 1)
@@ -383,21 +443,21 @@ def test_guard_helpers_directly() -> None:
     check_query(
         {}, spec, Guards(max_distinct_person_ids=0)
     )  # 0 means "no limit" after from_info; direct None-equivalent
-    with pytest.raises(Exception, match="distinct"):
+    with pytest.raises(GuardRefused, match="distinct"):
         check_query({"ids": ["a", "b", "c"]}, spec, Guards(max_distinct_person_ids=2))
     # Shapes the guard cannot count are refused, not counted as one value (an object's keys or a nested
     # array's members would reach the handler as N ids).
     for shape in ({"a": "a", "b": "b", "c": "c"}, [["a", "b", "c"]], ["a", ["b", "c"]], ["a", {"k": "b"}], [None]):
-        with pytest.raises(Exception, match="flat array") as exc:
+        with pytest.raises(GuardRefused, match="flat array") as exc:
             check_query({"ids": shape}, spec, Guards(max_distinct_person_ids=100))
         assert exc.value.detail() == {"guard": "maxDistinctPersonIds", "limit": 100}
     check_query({"ids": {"a": 1}}, spec, None)  # not enforced when the guard is disabled
     table = Table.from_columns({"g": ["x"], "n": [3]}).to_json()
     check_result(table, spec, Guards(min_group_size=3))
-    with pytest.raises(Exception, match="smaller"):
+    with pytest.raises(GuardRefused, match="smaller"):
         check_result(table, spec, Guards(min_group_size=4))
     null_count = Table.from_columns({"g": ["x"], "n": [None]}, {"n": "integer"}).to_json()
-    with pytest.raises(Exception, match="smaller"):
+    with pytest.raises(GuardRefused, match="smaller"):
         check_result(null_count, spec, Guards(min_group_size=1))
     assert Guards.from_info(None) is None
     assert Guards.from_info({}) == Guards() and not Guards().enabled

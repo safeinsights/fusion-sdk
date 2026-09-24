@@ -17,7 +17,7 @@ Source::
 
     serve()
 
-Researcher code never sees a URL, a token, a correlationId, an ACK or a retransmission. The
+Researcher code never sees a URL, a token, a correlationId or a retransmission. The
 cross-language contract this package implements lives in the repository's ``spec/`` directory.
 """
 
@@ -43,13 +43,13 @@ from .guards import Guards, OperationSpec
 from .simulate import SimFaults, Simulator, simulate
 from .source import Context, OperationRegistry, operations, serve
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 #: Envelope version this SDK speaks (spec/envelope.schema.json).
 ENVELOPE_VERSION = 1
 
 #: Local-API major version this SDK requires from ``GET /v1/info.apiVersion``.
-API_MAJOR = 1
+API_MAJOR = 2
 
 __all__ = [
     "API_MAJOR",

@@ -46,7 +46,7 @@ def fake() -> Iterator[FakeFactory]:
     """`fake("happy", longpoll_ms=200)` starts a fake pair for a scenario; stopped at teardown."""
     started: list[FakeTunnelPair] = []
 
-    def start(name: str, *, api_version: str = "1.0.0", **overrides: Any) -> FakeTunnelPair:
+    def start(name: str, *, api_version: str = "2.0.0", **overrides: Any) -> FakeTunnelPair:
         sc = load_scenario(name, SPEC / "scenarios")
         sc = replace(sc, longpoll_ms=overrides.pop("longpoll_ms", 200), **overrides)
         pair = FakeTunnelPair(sc, api_version=api_version)

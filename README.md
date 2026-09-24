@@ -2,21 +2,21 @@
 
 The SafeInsights **Fusion SDK**: the researcher-facing **R** and **Python** libraries for the Enclave Fusion Framework, plus the language-neutral contract they share.
 
-Researcher code never touches the transport. On the **destination** side it calls `request(peer, operation, params)` and gets the source's answer back; on the **source** side it registers Data-Partner-approved operation handlers and calls `serve()`. The SDK drives the per-job Fusion Tunnel App's enclave-local API: submit/poll, two-stage ACK, duplicate suppression, single in-flight round per peer, same-`correlationId` re-issue on round timeout, typed errors, budget hints, source-side guards, and content-free logging. It also owns the **fusion envelope** that travels inside the tunnel's end-to-end-encrypted payload, so an R source and a Python destination interoperate.
+Researcher code never touches the transport. On the **destination** side it calls `request(peer, operation, params)` and gets the source's answer back; on the **source** side it registers Data-Partner-approved operation handlers and calls `serve()`. The SDK drives the per-job Fusion Tunnel App's enclave-local API (version 2): submit/poll, duplicate suppression, single in-flight round per peer, same-`correlationId` re-issue on round timeout, typed errors, budget hints, source-side guards, and content-free logging. It also owns the **fusion envelope** that travels inside the tunnel's end-to-end-encrypted payload, so an R source and a Python destination interoperate.
 
-**Status:** implemented against [the plan](.claude/plans/2026-09-17-fusion-sdk-implementation.md) and proven against the in-repo fake tunnel pair; the real Tunnel App does not exist yet (Phase 8 wires it in). Package names are working names until decision A2 closes.
+**Status:** 0.2.0 implements local API 2 ([`spec/local-api.md`](spec/local-api.md), mirrored from `fusion-tunnel-app/src/local-api.ts`) and is proven against the in-repo fake tunnel pair; the real-tunnel switch (`FUSION_TEST_ANNOUNCE`) is ready for the tunnel's harness. Package names are working names until decision A2 closes.
 
 ## Layout
 
 | Path | What |
 | :-- | :-- |
-| [`spec/`](spec/) | The cross-language contract: envelope JSON Schema, error table, local-API mirror, env contract, log vocabulary, golden fixtures, fake-tunnel scenarios. Both test suites load it. |
+| [`spec/`](spec/) | The cross-language contract: envelope JSON Schema, error table, local API 2 mirror, env contract, log vocabulary, golden fixtures, fake-tunnel scenarios. Both test suites load it. |
 | [`python/`](python/) | `safeinsights-fusion` (PyPI). Stdlib only; `[pandas]` extra. |
 | [`r/`](r/) | `sifusion`. Imports: `curl`, `jsonlite`. |
-| [`tools/fake_tunnel_pair/`](tools/fake_tunnel_pair/) | Two local-API servers per leg joined by an in-memory relay, with scenario-driven fault injection. `python3 -m fake_tunnel_pair --scenario happy` |
+| [`tools/fake_tunnel_pair/`](tools/fake_tunnel_pair/) | Two local API 2 servers per leg joined by an in-memory relay, with scenario-driven fault injection. `python3 -m fake_tunnel_pair --scenario happy` |
 | [`tools/validate_spec.py`](tools/validate_spec.py) | Stdlib JSON Schema validator that gates `spec/` in CI. |
 | [`docker/`](docker/) | Dependency-footprint smoke on `python:3.12-slim` and `r-base`. |
-| [`docs/decisions/`](docs/decisions/) | ADRs 0001–0005. [`docs/asks/`](docs/asks/) — issue drafts for the tunnel, setup-app and management-app repos. |
+| [`docs/decisions/`](docs/decisions/) | ADRs 0001–0005. [`docs/asks/`](docs/asks/) — issue drafts for the setup-app and management-app repos; [`docs/compatibility.md`](docs/compatibility.md) — SDK ↔ tunnel `apiVersion` matrix. |
 | [`examples/`](examples/) | Two-party and hub starter templates in both languages, runnable under the simulator (`simulate_*.{py,R}`) and against the fake pair (`tools/run_examples.py`). |
 | [`tools/matrix.py`](tools/matrix.py), [`tools/chaos.py`](tools/chaos.py) | Cross-language matrix ({Py,R} destination x source, mixed-source hub, fixture parity) and the nightly random fault injection, driving `tools/conformance/`. |
 | [`docs/`](docs/) | [Researcher guide](docs/researcher-guide.md), [writing idempotent operations](docs/idempotent-operations.md), [the content-free logging contract](docs/logging-contract.md). |
@@ -46,7 +46,7 @@ python3 tools/chaos.py --r-src r --seeds 3
 
 - Authoritative spec: `SafeInsights Enclave Fusion Architecture Doc-v2.md` (§4.1, §4.5, §7, §12) in the parent workspace
 - Sequence diagrams: `fusion-rc-querys.md` (two-party); `drawings/fusion/FusionWithSafeInsightsEnclave-technical-phases/phase6-analysis-rounds.md` (hub)
-- Local-API contract: mirrored in [`spec/local-api.md`](spec/local-api.md) from `fusion-tunnel-app/src/schemas/local-api.ts` (canonical, once it exists); the envelope contract in [`spec/`](spec/) is owned here
+- Local-API contract: mirrored in [`spec/local-api.md`](spec/local-api.md) from `fusion-tunnel-app/src/local-api.ts` (canonical); the envelope contract in [`spec/`](spec/) is owned here
 
 ## License
 

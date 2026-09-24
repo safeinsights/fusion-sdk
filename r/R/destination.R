@@ -1,7 +1,7 @@
 # Destination side: fusion_connect(), one peer per leg, fusion_request() and fusion_complete().
-# Behavioral specification: plan section 3; liveness policy: ADR 0004.
+# Liveness policy: ADR 0004. A round is submit -> long-poll; the delivered response is the acknowledgement.
 
-sdk_api_major <- 1L
+sdk_api_major <- 2L
 
 new_peer <- function(transport, info, settings, label) {
   p <- new.env(parent = emptyenv())
@@ -15,7 +15,6 @@ new_peer <- function(transport, info, settings, label) {
   p$in_flight <- FALSE
   p$terminal <- NULL
   p$budget <- NULL
-  p$abandoned <- NULL
   p$closed <- FALSE
   class(p) <- "fusion_peer"
   p
@@ -43,10 +42,8 @@ check_usable <- function(p) {
 }
 
 go_terminal <- function(p, t) {
-  err <- fusion_terminal_condition(t$code, t$message, t$detail, peer = p$name)
-  p$terminal <- err
-  fusion_log("session.terminal", "ERROR", peer = p$name, code = t$code)
-  err
+  p$terminal <- terminal_failure(t, p$name)
+  p$terminal
 }
 
 #' Connect to the study's tunnel(s) as the destination
@@ -146,7 +143,7 @@ print.fusion_response <- function(x, ...) {
 #'
 #' Blocks until the source's response arrives, a typed error is raised, or the round timeout
 #' (with the SDK's same-`correlationId` re-issues) is exhausted. Researcher code never sees a
-#' `correlationId`, an ACK or a retransmission.
+#' `correlationId` or a retransmission.
 #'
 #' @param peer A `fusion_peer` from [fusion_peer()] (or a `fusion` object with a single peer).
 #' @param operation The Data-Partner-approved operation name.
@@ -167,57 +164,6 @@ fusion_request <- function(peer, operation, params = list(), timeout = NULL) {
   request_locked(peer, operation, params, timeout)
 }
 
-submit_round <- function(p, payload, correlation_id, deadline) {
-  do_submit <- function() p$transport$submit(payload, correlation_id)
-  result <- tryCatch(
-    retry_until(do_submit, deadline, p$settings, p$name, "submit"),
-    fusion_concurrency_error = function(e) {
-      stale <- e$correlation_id
-      if (is.null(correlation_id) && !is.null(p$abandoned) && (is.null(stale) || identical(stale, p$abandoned))) {
-        drain_abandoned(p)
-        retry_until(do_submit, deadline, p$settings, p$name, "submit")
-      } else {
-        stop(e)
-      }
-    }
-  )
-  if (is.list(result) && identical(result$kind, "terminal")) stop(go_terminal(p, result))
-  result
-}
-
-abandon_round <- function(p, correlation_id) {
-  done <- tryCatch(p$transport$abandon(correlation_id), fusion_error = function(e) FALSE)
-  if (!isTRUE(done)) p$abandoned <- correlation_id
-  invisible(NULL)
-}
-
-drain_abandoned <- function(p) {
-  cid <- p$abandoned
-  result <- tryCatch(p$transport$poll_response(cid, p$settings$poll_http_timeout_s),
-    fusion_unknown_correlation = function(e) list(kind = "unknown"),
-    fusion_retryable = function(e) fusion_concurrency_error(sprintf("abandoned round %s is still in flight at the tunnel (%s)", cid, e$code), peer = p$name)
-  )
-  if (identical(result$kind, "unknown")) {
-    p$abandoned <- NULL
-  } else if (identical(result$kind, "delivered")) {
-    ack_message(p$transport, p$settings, p$name, result$message_id)
-    p$abandoned <- NULL
-  } else if (identical(result$kind, "terminal")) {
-    stop(go_terminal(p, result))
-  } else {
-    fusion_concurrency_error(sprintf("abandoned round %s is still in flight at the tunnel", cid), peer = p$name)
-  }
-  invisible(NULL)
-}
-
-ack_message <- function(transport, settings, peer, message_id) {
-  deadline <- now_s() + max(5, settings$http_timeout_s * 3)
-  tryCatch(retry_until(function() transport$ack(message_id), deadline, settings, peer, "ack"),
-    fusion_round_timeout_error = function(e) fusion_log("ack.failed", "WARNING", peer = peer, messageId = message_id)
-  )
-  invisible(NULL)
-}
-
 request_locked <- function(p, operation, params, timeout) {
   s <- p$settings
   payload <- encode_query(operation, params)
@@ -226,70 +172,59 @@ request_locked <- function(p, operation, params, timeout) {
   fusion_log("round.start", "INFO", peer = p$name, operation = operation, bytes = nbytes)
   per_attempt <- if (is.null(timeout)) s$round_timeout_s else as.numeric(timeout)
   started <- now_s()
-  attempt_deadline <- started + per_attempt
-  reissues <- 0L
-  cid <- submit_round(p, payload, NULL, attempt_deadline)
-
-  reissue <- function(code) {
-    if (reissues >= s$round_max_reissues) {
-      fusion_log("round.timeout", "ERROR", peer = p$name, operation = operation, correlationId = cid, durationMs = round((now_s() - started) * 1000))
-      abandon_round(p, cid)
-      fusion_round_timeout_error(sprintf("round did not complete within %g s after %d re-issue(s)", per_attempt, reissues),
-        peer = p$name, correlation_id = cid, reissues = reissues
-      )
+  cid <- NULL
+  code <- NULL # why the previous attempt ended: TIMEOUT | UNKNOWN_CORRELATION
+  for (reissue in seq.int(0L, s$round_max_reissues)) {
+    if (!is.null(code)) fusion_log("round.reissue", "WARNING", peer = p$name, correlationId = cid, reissue = reissue, code = code)
+    deadline <- now_s() + per_attempt
+    cid <- submit_round(p, payload, cid, deadline)
+    result <- poll_round(p, cid, deadline)
+    if (is.list(result)) {
+      return(finish_round(p, result, operation, started))
     }
-    reissues <<- reissues + 1L
-    fusion_log("round.reissue", "WARNING", peer = p$name, correlationId = cid, reissue = reissues, code = code)
-    attempt_deadline <<- now_s() + per_attempt
-    submit_round(p, payload, cid, attempt_deadline)
+    code <- result
   }
+  fusion_log("round.timeout", "ERROR", peer = p$name, operation = operation, correlationId = cid, durationMs = round((now_s() - started) * 1000))
+  p$transport$abandon(cid)
+  fusion_round_timeout_error(sprintf("round did not complete within %g s after %d re-issue(s)", per_attempt, s$round_max_reissues),
+    peer = p$name, correlation_id = cid, reissues = s$round_max_reissues
+  )
+}
 
-  retry_attempt <- 0L
-  repeat {
-    remaining <- attempt_deadline - now_s()
-    if (remaining <= 0) {
-      reissue("TIMEOUT")
-      retry_attempt <- 0L
-      next
-    }
-    result <- tryCatch(
-      p$transport$poll_response(cid, min(s$poll_http_timeout_s, max(remaining, 1))),
-      fusion_unknown_correlation = function(e) list(kind = "unknown"),
-      fusion_retryable = function(e) list(kind = "retry", code = e$code)
+submit_round <- function(p, payload, correlation_id, deadline) {
+  result <- retry_until(function() p$transport$submit(payload, correlation_id), deadline, p$settings, p$name, "submit")
+  if (is.list(result) && identical(result$kind, "terminal")) stop(go_terminal(p, result))
+  result
+}
+
+# Long-poll until the response arrives (a delivered result), or the attempt ends with "TIMEOUT" or
+# "UNKNOWN_CORRELATION".
+poll_round <- function(p, cid, deadline) {
+  s <- p$settings
+  once <- function() p$transport$poll_response(cid, min(s$poll_http_timeout_s, max(deadline - now_s(), 1)))
+  while (now_s() < deadline) {
+    result <- tryCatch(retry_until(once, deadline, s, p$name, "poll"),
+      fusion_round_timeout_error = function(e) "TIMEOUT",
+      fusion_unknown_correlation = function(e) "UNKNOWN_CORRELATION"
     )
-    if (identical(result$kind, "unknown")) {
-      reissue("UNKNOWN_CORRELATION")
-      retry_attempt <- 0L
-      next
+    if (is.character(result)) {
+      return(result)
     }
-    if (identical(result$kind, "retry")) {
-      if (now_s() >= attempt_deadline) next
-      if (result$code == "BACKPRESSURE") {
-        fusion_log("round.backpressure", "WARNING", peer = p$name, attempt = retry_attempt)
-      } else {
-        fusion_log("round.retry", "DEBUG", peer = p$name, attempt = retry_attempt, code = result$code)
-      }
-      Sys.sleep(min(backoff_delay(retry_attempt, s$retry_base_ms, s$retry_max_ms), max(0, attempt_deadline - now_s())))
-      retry_attempt <- retry_attempt + 1L
-      next
-    }
-    if (identical(result$kind, "empty")) next
     if (identical(result$kind, "terminal")) stop(go_terminal(p, result))
-    return(finish_round(p, result, operation, started))
+    if (identical(result$kind, "delivered")) {
+      return(result)
+    }
   }
+  "TIMEOUT"
 }
 
 finish_round <- function(p, delivered, operation, started) {
-  # ACK first, even if the payload turns out undecodable: otherwise it is redelivered until dead-lettered.
-  ack_message(p$transport, p$settings, p$name, delivered$message_id)
   if (!is.null(delivered$budget)) p$budget <- delivered$budget
-  env <- tryCatch(decode_envelope(delivered$payload), fusion_envelope_error = function(e) {
+  env <- tryCatch(decode_envelope(delivered$payload), fusion_envelope_error = function(e) e)
+  if (inherits(env, "fusion_envelope_error") || !identical(env$kind, "response")) {
     fusion_log("round.protocol_error", "ERROR", peer = p$name, correlationId = delivered$correlation_id, messageId = delivered$message_id)
-    fusion_protocol_error(sprintf("response envelope is invalid: %s", conditionMessage(e)), peer = p$name)
-  })
-  if (!identical(env$kind, "response")) {
-    fusion_log("round.protocol_error", "ERROR", peer = p$name, correlationId = delivered$correlation_id, messageId = delivered$message_id)
-    fusion_protocol_error("expected a response envelope, got a query", peer = p$name)
+    reason <- if (inherits(env, "condition")) conditionMessage(env) else "expected a response envelope, got a query"
+    fusion_protocol_error(sprintf("response envelope is invalid: %s", reason), peer = p$name)
   }
   duration <- now_s() - started
   if (!is.null(env$error)) {
@@ -302,14 +237,7 @@ finish_round <- function(p, delivered, operation, started) {
     messageId = delivered$message_id, bytes = resp_bytes, durationMs = round(duration * 1000),
     roundsUsed = p$budget$rounds_used, roundsMax = p$budget$rounds_max
   )
-  if (!is.null(p$budget)) {
-    for (n in budget_near_limit(p$budget)) {
-      args <- list("budget.near_limit", "WARNING", peer = p$name)
-      args[[paste0(n$name, "Used")]] <- n$used
-      args[[paste0(n$name, "Max")]] <- n$max
-      do.call(fusion_log, args)
-    }
-  }
+  log_budget(p$name, p$budget)
   structure(
     list(
       body = env$body, operation = operation, peer = p$name, correlation_id = delivered$correlation_id,

@@ -24,5 +24,5 @@ A \code{fusion_response} with \verb{$body} (raw JSON as nested lists), \verb{$bu
 \description{
 Blocks until the source's response arrives, a typed error is raised, or the round timeout
 (with the SDK's same-\code{correlationId} re-issues) is exhausted. Researcher code never sees a
-\code{correlationId}, an ACK or a retransmission.
+\code{correlationId} or a retransmission.
 }

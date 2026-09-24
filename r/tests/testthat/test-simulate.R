@@ -62,7 +62,7 @@ test_that("faults: dropped response is replayed on re-issue, session error and c
   expect_equal(outcomes, c(`dp-sim` = "LIMIT_EXCEEDED"))
   sifusion::fusion_simulate(sim_ops(), function(fusion) {
     e <- tryCatch(sifusion::fusion_request(fusion, "counts_by_group", list(person_ids = I("a"))), fusion_limit_exceeded_error = function(e) e)
-    expect_equal(e$cap, "maxResponseBytesPerRound")
+    expect_equal(e$cap, "maxResponsePlaintextBytesPerRound")
   }, faults = sifusion::fusion_sim_faults(max_response_bytes_per_round = 10))
 })
 

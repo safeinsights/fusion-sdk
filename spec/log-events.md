@@ -1,6 +1,6 @@
 # Log events
 
-Architecture Doc v2 §12: logging is **event-level, never content-level**. Both SDKs emit the same vocabulary with the same field names so a reviewer reads one contract. Python logs through the stdlib logger `safeinsights_fusion`; R through `message()` with `FUSION_LOG_LEVEL` filtering. Every record is one line: `fusion <event> key=value …`.
+Logging is **event-level, never content-level**. Both SDKs emit the same vocabulary with the same field names so a reviewer reads one contract. Python logs through the stdlib logger `safeinsights_fusion`; R through `message()` with `FUSION_LOG_LEVEL` filtering. Every record is one line: `fusion <event> key=value …`.
 
 ## Forbidden fields
 
@@ -8,7 +8,7 @@ Architecture Doc v2 §12: logging is **event-level, never content-level**. Both 
 
 ## Allowed fields
 
-`peer`, `legId`, `role`, `operation`, `correlationId`, `messageId`, `bytes`, `durationMs`, `attempt`, `reissue`, `state`, `code`, `guard`, `limit`, `observed` (distinct-ID count only), `roundsUsed`, `roundsMax`, `responseBytesUsed`, `responseBytesMax`, `queryBytesUsed`, `queryBytesMax`, `endpointCount`, `apiVersion`, `cap`, `label`, `level`.
+Exactly this list, in both languages (`_log.ALLOWED_FIELDS` / `allowed_log_fields`; a test in each suite checks): `peer`, `legId`, `role`, `operation`, `operations`, `correlationId`, `messageId`, `bytes`, `durationMs`, `attempt`, `reissue`, `state`, `code`, `guard`, `limit`, `observed`, `cap`, `roundsUsed`, `roundsMax`, `maxDistinctPersonIds`, `minGroupSize`, `endpointCount`, `apiVersion`.
 
 ## Vocabulary
 
@@ -18,17 +18,17 @@ Architecture Doc v2 §12: logging is **event-level, never content-level**. Both 
 | `ready.wait` | INFO | both | `peer`, `state`, `attempt` |
 | `ready.ok` | INFO | both | `peer`, `legId`, `role`, `durationMs` |
 | `ready.timeout` | ERROR | both | `peer`, `state`, `durationMs` |
-| `guards.loaded` | INFO | src | `peer`, `guard`×n as `maxDistinctPersonIds=`, `minGroupSize=` |
+| `guards.loaded` | INFO | src | `peer`, `maxDistinctPersonIds`, `minGroupSize` |
 | `guards.disabled` | WARNING | src | `peer` |
-| `round.start` | INFO | dst | `peer`, `operation`, `correlationId`?, `bytes` |
+| `round.start` | INFO | dst | `peer`, `operation`, `bytes` |
 | `round.reissue` | WARNING | dst | `peer`, `correlationId`, `reissue`, `code` (`TIMEOUT` \| `UNKNOWN_CORRELATION`) |
 | `round.backpressure` | WARNING | both | `peer`, `attempt` |
 | `round.retry` | DEBUG | both | `peer`, `attempt`, `code` |
 | `round.complete` | INFO | dst | `peer`, `operation`, `correlationId`, `messageId`, `bytes`, `durationMs`, `roundsUsed`, `roundsMax` |
 | `round.remote_error` | WARNING | dst | `peer`, `operation`, `correlationId`, `code` |
 | `round.timeout` | ERROR | dst | `peer`, `operation`, `correlationId`, `durationMs` |
-| `round.protocol_error` | ERROR | both | `peer`, `correlationId`?, `messageId`? |
-| `serve.start` | INFO | src | `peer`, `operation`×n as `operations=` (names only) |
+| `round.protocol_error` | ERROR | both | `peer`, `correlationId`, `messageId` — dst: undecodable response; src: the response could not be handed to the tunnel |
+| `serve.start` | INFO | src | `peer`, `operations` (names only) |
 | `serve.received` | INFO | src | `peer`, `correlationId`, `messageId`, `bytes` |
 | `serve.memo_replay` | INFO | src | `peer`, `correlationId` |
 | `serve.unknown_operation` | WARNING | src | `peer`, `correlationId`, `operation` |
@@ -37,11 +37,9 @@ Architecture Doc v2 §12: logging is **event-level, never content-level**. Both 
 | `serve.handler_error` | ERROR | src | `peer`, `correlationId`, `operation`, `durationMs` (traceback goes to the local log at DEBUG, never to this line) |
 | `round.served` | INFO | src | `peer`, `correlationId`, `operation`, `bytes`, `durationMs`, `roundsUsed`, `roundsMax` |
 | `envelope.large` | WARNING | both | `peer`, `bytes`, `limit` |
-| `ack.unknown` | WARNING | both | `peer`, `messageId` |
-| `ack.failed` | WARNING | both | `peer`, `messageId` | the ACK could not be delivered after bounded retries; the message may be redelivered |
-| `budget.near_limit` | WARNING | both | `peer`, one `*Used`/`*Max` pair | emitted when any counter passes 90 % |
+| `budget.near_limit` | WARNING | both | `peer`, `cap` (manifest name), `limit`, `observed` — emitted when a counter passes 90 % of its cap |
 | `session.complete` | INFO | src | `peer`, `roundsUsed` |
 | `session.terminal` | ERROR | both | `peer`, `code` |
 | `complete.start` | INFO | dst | `endpointCount` |
 | `complete.leg` | INFO | dst | `peer`, `code` (`OK` \| terminal code \| `ERROR`) |
-| `doctor.*` | INFO | both | `peer`, `state`, `apiVersion` |
+| `doctor.info` | INFO | both | `peer`, `state`, `apiVersion` |

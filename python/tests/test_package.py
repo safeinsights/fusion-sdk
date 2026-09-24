@@ -13,4 +13,4 @@ def test_version_is_semver() -> None:
 
 def test_contract_constants() -> None:
     assert safeinsights_fusion.ENVELOPE_VERSION == 1
-    assert safeinsights_fusion.API_MAJOR == 1
+    assert safeinsights_fusion.API_MAJOR == 2

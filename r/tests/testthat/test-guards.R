@@ -79,7 +79,7 @@ test_that("budget parsing and near-limit detection", {
   expect_null(b$response_bytes_max)
   nl <- sifusion:::budget_near_limit(b)
   expect_length(nl, 1)
-  expect_equal(nl[[1]]$name, "rounds")
+  expect_equal(nl[[1]], list(cap = "maxRounds", observed = 9, limit = 10))
   expect_null(sifusion:::budget_from_json(NULL))
   expect_output(print(b), "rounds 9/10")
   expect_equal(sifusion:::api_major("1.4.2"), 1L)

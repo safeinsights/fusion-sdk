@@ -1,7 +1,7 @@
-# Source side: operation registry and fusion_serve() (plan section 3 "Source serve() loop").
-# A handler error never crashes the loop: it becomes a HANDLER_ERROR envelope (ADR 0005). Redelivered
-# queries are answered from the in-memory memo without re-running the handler; guards run around every
-# handler call (ADR 0002).
+# Source side: operation registry and fusion_serve().
+# A handler error never crashes the loop: it becomes a HANDLER_ERROR envelope (ADR 0005). A query the
+# tunnel delivers again is answered from the in-memory memo without re-running the handler; guards run
+# around every handler call (ADR 0002). Receiving a query is its acknowledgement.
 
 #' Declare an operation handler
 #'
@@ -103,7 +103,6 @@ new_server <- function(transport, operations, settings, label) {
   srv$info <- NULL
   srv$guards <- NULL
   srv$memo <- new_memo(settings$memo_max_entries)
-  srv$in_progress <- character(0)
   srv$budget <- NULL
   srv$rounds_served <- 0L
   srv
@@ -133,28 +132,13 @@ server_start <- function(srv, deadline) {
 
 server_run <- function(srv) {
   s <- srv$settings
-  retry_attempt <- 0L
   repeat {
-    msg <- tryCatch(srv$transport$next_message(s$poll_http_timeout_s), fusion_retryable = function(e) list(kind = "retry", code = e$code))
-    if (identical(msg$kind, "retry")) {
-      if (msg$code == "BACKPRESSURE") {
-        fusion_log("round.backpressure", "WARNING", peer = srv$peer, attempt = retry_attempt)
-      } else {
-        fusion_log("round.retry", "DEBUG", peer = srv$peer, attempt = retry_attempt, code = msg$code)
-      }
-      Sys.sleep(backoff_delay(retry_attempt, s$retry_base_ms, s$retry_max_ms))
-      retry_attempt <- min(retry_attempt + 1L, 10L)
-      next
-    }
-    retry_attempt <- 0L
+    # The source has no round timeout: keep polling with capped backoff, forever.
+    msg <- retry_until(function() srv$transport$next_message(s$poll_http_timeout_s), Inf, s, srv$peer, "poll")
     if (identical(msg$kind, "empty")) next
     if (identical(msg$kind, "terminal")) {
-      if (msg$code == "STUDY_COMPLETE") {
-        fusion_log("session.complete", "INFO", peer = srv$peer, roundsUsed = srv$rounds_served)
-        return(invisible(NULL))
-      }
-      fusion_log("session.terminal", "ERROR", peer = srv$peer, code = msg$code)
-      stop(fusion_terminal_condition(msg$code, msg$message, msg$detail, peer = srv$peer))
+      server_ended(srv, msg)
+      return(invisible(NULL))
     }
     if (identical(server_step(srv, msg), "STUDY_COMPLETE")) {
       return(invisible(NULL))
@@ -162,9 +146,17 @@ server_run <- function(srv) {
   }
 }
 
+# The leg ended: STUDY_COMPLETE returns its code; anything else signals the typed error.
+server_ended <- function(srv, t) {
+  if (identical(t$code, "STUDY_COMPLETE")) {
+    fusion_log("session.complete", "INFO", peer = srv$peer, roundsUsed = srv$rounds_served)
+    return(t$code)
+  }
+  stop(terminal_failure(t, srv$peer))
+}
+
 server_step <- function(srv, msg) {
   started <- now_s()
-  ack_message(srv$transport, srv$settings, srv$peer, msg$message_id)
   if (!is.null(msg$budget)) srv$budget <- msg$budget
   fusion_log("serve.received", "INFO", peer = srv$peer, correlationId = msg$correlation_id, messageId = msg$message_id, bytes = canonical_bytes(msg$payload))
   cached <- memo_get(srv$memo, msg$correlation_id)
@@ -172,11 +164,6 @@ server_step <- function(srv, msg) {
     fusion_log("serve.memo_replay", "INFO", peer = srv$peer, correlationId = msg$correlation_id)
     return(server_respond(srv, msg, cached, started, NULL))
   }
-  if (msg$correlation_id %in% srv$in_progress) {
-    return(NULL)
-  }
-  srv$in_progress <- c(srv$in_progress, msg$correlation_id)
-  on.exit(srv$in_progress <- setdiff(srv$in_progress, msg$correlation_id), add = TRUE)
   handled <- server_handle(srv, msg)
   server_respond(srv, msg, handled$payload, started, handled$operation)
 }
@@ -249,21 +236,20 @@ server_respond <- function(srv, msg, payload, started, operation) {
   result <- tryCatch(
     retry_until(function() srv$transport$post_response(msg$correlation_id, payload), deadline, srv$settings, srv$peer, "respond"),
     fusion_round_timeout_error = function(e) {
+      # The tunnel was unreachable for too long. It still holds the query and delivers it again on a later
+      # poll; the memo then answers it without re-running the handler.
       memo_put(srv$memo, msg$correlation_id, payload)
-      fusion_log("round.protocol_error", "ERROR", peer = srv$peer, correlationId = msg$correlation_id, messageId = msg$message_id)
-      list(kind = "failed")
-    }
+      list(kind = "dropped")
+    },
+    # 409: the tunnel no longer knows the round (it restarted, or the round was abandoned): nothing to memoise.
+    fusion_concurrency_error = function(e) list(kind = "dropped")
   )
-  if (is.list(result) && identical(result$kind, "failed")) {
+  if (is.list(result) && identical(result$kind, "dropped")) {
+    fusion_log("round.protocol_error", "ERROR", peer = srv$peer, correlationId = msg$correlation_id, messageId = msg$message_id)
     return(NULL)
   }
   if (is.list(result) && identical(result$kind, "terminal")) {
-    if (result$code == "STUDY_COMPLETE") {
-      fusion_log("session.complete", "INFO", peer = srv$peer, roundsUsed = srv$rounds_served)
-      return(result$code)
-    }
-    fusion_log("session.terminal", "ERROR", peer = srv$peer, code = result$code)
-    stop(fusion_terminal_condition(result$code, result$message, result$detail, peer = srv$peer))
+    return(server_ended(srv, result))
   }
   if (inherits(result, "fusion_budget")) srv$budget <- result
   memo_put(srv$memo, msg$correlation_id, payload)
@@ -272,14 +258,7 @@ server_respond <- function(srv, msg, payload, started, operation) {
     peer = srv$peer, correlationId = msg$correlation_id, operation = operation, bytes = nbytes,
     durationMs = round((now_s() - started) * 1000), roundsUsed = srv$budget$rounds_used, roundsMax = srv$budget$rounds_max
   )
-  if (!is.null(srv$budget)) {
-    for (n in budget_near_limit(srv$budget)) {
-      args <- list("budget.near_limit", "WARNING", peer = srv$peer)
-      args[[paste0(n$name, "Used")]] <- n$used
-      args[[paste0(n$name, "Max")]] <- n$max
-      do.call(fusion_log, args)
-    }
-  }
+  log_budget(srv$peer, srv$budget)
   NULL
 }
 

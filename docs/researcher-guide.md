@@ -3,7 +3,7 @@
 A fusion study runs analysis code in two places at once. The **destination** research container asks
 questions; each **source** research container (one per Data Partner) answers only the operations its
 Data Partner approved. Your code never touches the transport: the SDK talks to the per-job Fusion Tunnel
-App and hides retries, acknowledgements and re-issues.
+App and hides retries and re-issues.
 
 ## Destination code
 

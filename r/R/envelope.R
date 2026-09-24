@@ -75,7 +75,7 @@ to_json_value <- function(x) {
   }
   as_is <- inherits(x, "AsIs")
   if (is.factor(x)) x <- as.character(x)
-  if (inherits(x, "Date")) x <- ifelse(is.na(x), NA_character_, format(x, "%Y-%m-%d"))
+  if (inherits(x, "Date")) x <- format_date(x)
   if (inherits(x, "POSIXt")) x <- format_datetime(x)
   if (is.numeric(x)) {
     vals <- if (is.integer(x)) lapply(x, json_integer) else lapply(x, json_number)
@@ -109,6 +109,12 @@ decode_json <- function(text) jsonlite::fromJSON(text, simplifyVector = FALSE)
 
 # ---- dates and datetimes ---------------------------------------------------------------------------
 
+# ISO 8601 with a zero-padded four-digit year (format() prints year 1 as "1"). NA stays NA.
+format_date <- function(x) {
+  lt <- as.POSIXlt(x)
+  ifelse(is.na(x), NA_character_, sprintf("%04d-%02d-%02d", lt$year + 1900L, lt$mon + 1L, lt$mday))
+}
+
 # UTC, `T` separator, 0 or exactly 3 fractional digits (truncated), `Z`.
 # Milliseconds are taken with a 1 us tolerance so 0.123 stored as 0.12299999 still prints .123.
 format_datetime <- function(x) {
@@ -117,7 +123,8 @@ format_datetime <- function(x) {
   ms <- floor((secs - whole) * 1000 + 1e-3) # 1 us tolerance: doubles near 1.7e9 carry ~0.2 us of error
   whole <- ifelse(ms >= 1000, whole + 1, whole)
   ms <- ifelse(ms >= 1000, 0, ms)
-  base <- format(as.POSIXct(whole, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+  lt <- as.POSIXlt(whole, origin = "1970-01-01", tz = "UTC")
+  base <- sprintf("%04d-%02d-%02dT%02d:%02d:%02d", lt$year + 1900L, lt$mon + 1L, lt$mday, lt$hour, lt$min, as.integer(lt$sec))
   ifelse(is.na(secs), NA_character_, paste0(base, ifelse(ms > 0, sprintf(".%03d", ms), ""), "Z"))
 }
 
@@ -212,7 +219,7 @@ encode_cell <- function(v, type) {
     },
     date = {
       if (!inherits(v, "Date")) envelope_error("date column needs Date values")
-      format(v, "%Y-%m-%d")
+      format_date(v)
     },
     datetime = {
       if (!inherits(v, "POSIXt")) envelope_error("datetime column needs POSIXct values")

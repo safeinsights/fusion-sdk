@@ -22,7 +22,7 @@ SAMPLE = {
 operations = OperationRegistry()
 
 
-@operations.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+@operations.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
 def counts_by_group(params: dict[str, Any], ctx: Context) -> Table:
     """How many of the requested people fall in each group. Pure function of params: idempotent."""
     group_by = params.get("group_by", "grade")

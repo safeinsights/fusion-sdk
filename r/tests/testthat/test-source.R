@@ -49,10 +49,11 @@ ops <- fusion_operations(
   counts_by_group = fusion_operation(function(params, ctx) {
     small <- isTRUE(params$small)
     data.frame(grade = c("9", "10"), n = c(5L, if (small) 2L else 4L))
-  }, person_id_param = "person_ids", cardinality = "per-group"),
-  two_counts = fusion_operation(function(params, ctx) data.frame(a = 5L, b = 6L), cardinality = "per-group"),
+  }, person_id_param = "person_ids", cardinality = "per-group", count_column = "n"),
   two_counts_declared = fusion_operation(function(params, ctx) data.frame(a = 1L, b = 6L), cardinality = "per-group", count_column = "b"),
-  per_group_scalar = fusion_operation(function(params, ctx) 7, cardinality = "per-group"),
+  count_missing = fusion_operation(function(params, ctx) data.frame(a = 5L, b = 6L), cardinality = "per-group", count_column = "n"),
+  float_counts = fusion_operation(function(params, ctx) data.frame(year = 2024L, n = 1), cardinality = "per-group", count_column = "n"),
+  per_group_scalar = fusion_operation(function(params, ctx) 7, cardinality = "per-group", count_column = "n"),
   aggregate_small = fusion_operation(function(params, ctx) data.frame(n = 1L))
 )
 '
@@ -74,9 +75,12 @@ ops <- fusion_operations(
     }
     e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = I("a"), small = TRUE)), fusion_remote_error = function(e) e)
     expect_equal(e$detail, list(guard = "minGroupSize", limit = 3L))
-    e <- tryCatch(sifusion::fusion_request(peer, "two_counts"), fusion_remote_error = function(e) e)
-    expect_match(e$remote_message, "count_column")
     expect_s3_class(sifusion::fusion_request(peer, "two_counts_declared"), "fusion_response")
+    e <- tryCatch(sifusion::fusion_request(peer, "count_missing"), fusion_remote_error = function(e) e)
+    expect_match(e$remote_message, "not in the result")
+    e <- tryCatch(sifusion::fusion_request(peer, "float_counts"), fusion_remote_error = function(e) e)
+    expect_equal(e$detail, list(guard = "minGroupSize", limit = 3L))
+    expect_match(e$remote_message, "integer column")
     e <- tryCatch(sifusion::fusion_request(peer, "per_group_scalar"), fusion_remote_error = function(e) e)
     expect_match(e$remote_message, "fusion table")
     expect_s3_class(sifusion::fusion_request(peer, "aggregate_small"), "fusion_response")
@@ -95,7 +99,7 @@ test_that("the registry is pre-flighted against the approved operation list", {
     expect_match(child_output(extra), "registered but not in the approved list")
     ok_ops <- '
 ops <- fusion_operations(
-  counts_by_group = fusion_operation(function(params, ctx) data.frame(g = "x", n = 1L), cardinality = "per-group"),
+  counts_by_group = fusion_operation(function(params, ctx) data.frame(g = "x", n = 1L), cardinality = "per-group", count_column = "n"),
   total = fusion_operation(function(params, ctx) list(ok = TRUE))
 )
 '

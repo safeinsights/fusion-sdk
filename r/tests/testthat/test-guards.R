@@ -9,7 +9,7 @@ test_that("distinct_count canonicalises values", {
 })
 
 test_that("check_query and check_result", {
-  spec <- sifusion::fusion_operation(function(p, c) 1, person_id_param = "ids", cardinality = "per-group")
+  spec <- sifusion::fusion_operation(function(p, c) 1, person_id_param = "ids", cardinality = "per-group", count_column = "n")
   expect_null(sifusion:::check_query(list(ids = list("a", "b")), spec, g(max_distinct_person_ids = 2L)))
   expect_null(sifusion:::check_query(list(ids = list("a", "b", "c")), spec, NULL))
   e <- tryCatch(sifusion:::check_query(list(ids = list("a", "b", "c")), spec, g(max_distinct_person_ids = 2L)), fusion_guard_refused = function(e) e)
@@ -29,9 +29,17 @@ test_that("check_query and check_result", {
   expect_equal(sifusion:::guard_detail(e), list(guard = "minGroupSize", limit = 4L))
   expect_match(conditionMessage(e), "smaller")
   two <- sifusion::fusion_table(data.frame(a = 5L, b = 6L))$json
-  expect_error(sifusion:::check_result(two, spec, g(min_group_size = 1L)), "count_column")
+  expect_error(sifusion:::check_result(two, spec, g(min_group_size = 1L)), "not in the result")
   declared <- sifusion::fusion_operation(function(p, c) 1, cardinality = "per-group", count_column = "b")
   expect_null(sifusion:::check_result(two, declared, g(min_group_size = 1L)))
+  # The count column is never inferred from column types, and must be integer-typed.
+  expect_error(sifusion::fusion_operation(function(p, c) 1, cardinality = "per-group"), "count_column")
+  undeclared <- structure(list(handler = function(p, c) 1, cardinality = "per-group", count_column = NULL), class = "fusion_operation")
+  expect_error(sifusion:::check_result(two, undeclared, g(min_group_size = 1L)), "count_column")
+  key_only <- sifusion::fusion_table(data.frame(year = 2024L, n = 1))$json
+  e <- tryCatch(sifusion:::check_result(key_only, spec, g(min_group_size = 11L)), fusion_guard_refused = function(e) e)
+  expect_match(conditionMessage(e), "integer column")
+  expect_equal(sifusion:::guard_detail(e), list(guard = "minGroupSize", limit = 11L))
   expect_error(sifusion:::check_result(7, spec, g(min_group_size = 1L)), "fusion table")
   null_count <- sifusion::fusion_table(data.frame(grp = "x", n = NA_integer_))$json
   expect_error(sifusion:::check_result(null_count, spec, g(min_group_size = 1L)), "smaller")
@@ -45,7 +53,7 @@ test_that("guards_from_info and preflight", {
   gg <- sifusion:::guards_from_info(list(maxDistinctPersonIds = 10, minGroupSize = TRUE))
   expect_equal(gg$max_distinct_person_ids, 10L)
   expect_null(gg$min_group_size)
-  ops <- sifusion::fusion_operations(op = sifusion::fusion_operation(function(p, c) 1, cardinality = "per-group"))
+  ops <- sifusion::fusion_operations(op = sifusion::fusion_operation(function(p, c) 1, cardinality = "per-group", count_column = "n"))
   expect_length(sifusion:::preflight(ops, NULL), 0)
   expect_length(sifusion:::preflight(ops, list(list(name = "op", cardinality = "per-group"))), 0)
   expect_length(sifusion:::preflight(ops, list(list(name = "op"))), 0)

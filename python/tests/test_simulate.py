@@ -24,7 +24,7 @@ def registry() -> OperationRegistry:
     reg = OperationRegistry()
     calls = {"n": 0}
 
-    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
     def counts(params: dict[str, Any], ctx: Any) -> Table:
         calls["n"] += 1
         n = len(params["person_ids"])

@@ -23,8 +23,8 @@ Its value must be absent, one scalar, or a flat array of scalars; other shapes a
 
 \item{cardinality}{One of \code{"aggregate"}, \code{"per-group"}, \code{"per-record"} (the manifest's class).}
 
-\item{count_column}{For \code{per-group} operations, the result column holding group sizes; inferred
-as the single integer column when omitted.}
+\item{count_column}{For \code{per-group} operations, the result column holding group sizes. Required:
+\code{minGroupSize} is checked on that column only and the SDK never infers it from column types.}
 
 \item{sanitize}{If \code{TRUE}, a handler error crosses to the destination as class and one-line
 message only, instead of the full traceback (ADR 0005).}

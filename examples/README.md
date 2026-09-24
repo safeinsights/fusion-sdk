@@ -16,7 +16,8 @@ Rules the examples follow (and your study code should too):
   hand a handler the same query twice after a restart; here every handler is a pure function of its params.
 - **Declare guards at registration**: `person_id_param` names the Person-ID list so `maxDistinctPersonIds`
   can be enforced (the list must be a flat array of scalars; other shapes are refused before the
-  handler runs); `cardinality="per-group"` enables `minGroupSize` on the result table.
+  handler runs); `cardinality="per-group"` enables `minGroupSize` on the result table's declared
+  `count_column`, which is required.
 - **Nothing but the SDK talks to the network.** Result release stays with your Data Partner package
   (for example `osenclave::toa_results_upload()`), outside these files.
 - **Logs are content-free** (`docs/logging-contract.md`): print summaries, never row values.

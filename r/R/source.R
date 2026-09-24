@@ -12,8 +12,8 @@
 #'   Its value must be absent, one scalar, or a flat array of scalars; other shapes are refused with
 #'   `GUARD_REFUSED` before the handler runs.
 #' @param cardinality One of `"aggregate"`, `"per-group"`, `"per-record"` (the manifest's class).
-#' @param count_column For `per-group` operations, the result column holding group sizes; inferred
-#'   as the single integer column when omitted.
+#' @param count_column For `per-group` operations, the result column holding group sizes. Required:
+#'   `minGroupSize` is checked on that column only and the SDK never infers it from column types.
 #' @param sanitize If `TRUE`, a handler error crosses to the destination as class and one-line
 #'   message only, instead of the full traceback (ADR 0005).
 #' @return An object of class `fusion_operation`.
@@ -21,6 +21,9 @@
 fusion_operation <- function(handler, person_id_param = NULL, cardinality = "aggregate", count_column = NULL, sanitize = FALSE) {
   if (!is.function(handler)) stop("handler must be a function(params, ctx)")
   if (!cardinality %in% cardinalities) stop(sprintf("cardinality must be one of: %s", paste(cardinalities, collapse = ", ")))
+  if (identical(cardinality, "per-group") && is.null(count_column)) {
+    stop("per-group operations must declare count_column: minGroupSize is checked on that column only")
+  }
   structure(list(
     handler = handler, person_id_param = person_id_param, cardinality = cardinality,
     count_column = count_column, sanitize = isTRUE(sanitize)

@@ -35,9 +35,12 @@ jobs:
                   pip install ./python
                   R CMD INSTALL --no-docs r
             - name: Chaos
+              env:
+                  SEED: ${{ github.event.inputs.seed }}
+                  SEEDS: ${{ github.event.inputs.seeds || '6' }}
               run: |
-                  if [ -n "${{ github.event.inputs.seed }}" ]; then
-                      python3 tools/chaos.py --py-installed --seed "${{ github.event.inputs.seed }}"
+                  if [ -n "$SEED" ]; then
+                      python3 tools/chaos.py --py-installed --seed "$SEED"
                   else
-                      python3 tools/chaos.py --py-installed --seeds "${{ github.event.inputs.seeds || '6' }}"
+                      python3 tools/chaos.py --py-installed --seeds "$SEEDS"
                   fi

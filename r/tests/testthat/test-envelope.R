@@ -141,3 +141,13 @@ test_that("tibbles are accepted when available", {
   expect_equal(unname(t$types), c("string", "integer"))
   expect_s3_class(sifusion::fusion_as_data_frame(dec(enc(t))), "data.frame")
 })
+
+test_that("repeated member names are refused before the guards see them", {
+  # jsonlite keeps both entries and `$` returns the first; Python's parser collapses to one.
+  dup_params <- sifusion:::decode_json('{"v":1,"kind":"query","operation":"op","params":{"ids":["a"],"ids":["b","c"]}}')
+  expect_error(sifusion:::decode_envelope(dup_params), "repeats a member name", class = "fusion_envelope_error")
+  dup_top <- sifusion:::decode_json('{"v":1,"kind":"query","operation":"op","operation":"other","params":{"ids":["a"]}}')
+  expect_error(sifusion:::decode_envelope(dup_top), "repeats a member name", class = "fusion_envelope_error")
+  ok <- sifusion:::decode_json('{"v":1,"kind":"query","operation":"op","params":{"ids":["a"],"other":["b"]}}')
+  expect_equal(sifusion:::decode_envelope(ok)$params$ids, list("a"))
+})

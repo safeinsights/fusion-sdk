@@ -11,7 +11,7 @@ from safeinsights_fusion import Context, OperationRegistry, Table, serve
 ops = OperationRegistry()
 
 
-@ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+@ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
 def counts_by_group(params: dict[str, Any], ctx: Context) -> Table:
     n = len(params.get("person_ids") or [])
     return Table.from_columns({"grade": ["9", "10"], "n": [n, 2 * n + 1]})

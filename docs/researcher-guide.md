@@ -44,7 +44,7 @@ from safeinsights_fusion import OperationRegistry, serve
 
 ops = OperationRegistry()
 
-@ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+@ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
 def counts_by_group(params, ctx):
     ...
     return Table.from_columns({"grade": grades, "n": counts})   # or a pandas DataFrame, a dict, a list, a scalar
@@ -55,14 +55,16 @@ serve(ops)          # blocks until the destination completes the study
 ```r
 ops <- fusion_operations(
   counts_by_group = fusion_operation(function(params, ctx) { ... },
-                                     person_id_param = "person_ids", cardinality = "per-group")
+                                     person_id_param = "person_ids", cardinality = "per-group",
+                                     count_column = "n")
 )
 fusion_serve(ops)
 ```
 
 - Handlers must be **idempotent per `correlationId`** (`docs/idempotent-operations.md`).
-- Declare `person_id_param` and `cardinality` so the source-side guards can be enforced; declare
-  `count_column` when a per-group table has more than one integer column. The Person-ID parameter
+- Declare `person_id_param` and `cardinality` so the source-side guards can be enforced. A per-group
+  operation must name its `count_column`: `minGroupSize` checks that column only, it must be an
+  integer column, and the SDK never guesses it from column types. The Person-ID parameter
   must arrive as a flat array of scalars: an object or a nested array is refused as `GUARD_REFUSED`
   before the handler runs, so the destination should always send `{"person_ids": ["p1", "p2"]}`.
 - A handler exception never crashes the loop; it crosses as `HANDLER_ERROR` with the traceback unless

@@ -100,19 +100,17 @@ check_query <- function(params, spec, guards) {
   invisible(NULL)
 }
 
+# The count column is declared at registration; the guard never guesses it from column types. Inferring
+# "the single integer column" let a per-group table whose only integer column was a key (a year, an age)
+# pass with its double-typed counts never inspected.
 find_count_column <- function(df, types, declared) {
-  if (!is.null(declared)) {
-    if (!declared %in% names(df)) guard_refused("minGroupSize", 0L, sprintf("declared count column '%s' is not in the result", declared))
-    return(declared)
+  if (is.null(declared)) guard_refused("minGroupSize", 0L, "per-group operations must be registered with count_column")
+  if (!declared %in% names(df)) guard_refused("minGroupSize", 0L, sprintf("declared count column '%s' is not in the result", declared))
+  col_type <- types[[match(declared, names(df))]]
+  if (!col_type %in% c("integer", "integer64")) {
+    guard_refused("minGroupSize", 0L, sprintf("count column '%s' must be an integer column, not %s", declared, col_type))
   }
-  candidates <- names(df)[types %in% c("integer", "integer64")]
-  if (length(candidates) != 1) {
-    guard_refused("minGroupSize", 0L, sprintf(
-      "cannot identify the group-count column (%d integer columns); register the operation with count_column",
-      length(candidates)
-    ))
-  }
-  candidates
+  declared
 }
 
 check_result <- function(body_json, spec, guards) {

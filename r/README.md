@@ -13,7 +13,8 @@ fusion_complete(fusion)
 # source
 ops <- fusion_operations(
   counts_by_group = fusion_operation(function(params, ctx) { ... },
-                                     person_id_param = "person_ids", cardinality = "per-group")
+                                     person_id_param = "person_ids", cardinality = "per-group",
+                                     count_column = "n")
 )
 fusion_serve(ops)
 ```

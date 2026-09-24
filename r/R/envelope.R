@@ -442,6 +442,9 @@ encode_body <- function(body) {
 # Decode a received envelope (a fromJSON(simplifyVector = FALSE) structure).
 decode_envelope <- function(obj) {
   if (!is_json_object(obj)) envelope_error("envelope must be an object")
+  # jsonlite keeps repeated member names as separate entries and `$` returns the first, so a handler that
+  # walks the whole list could see a member the guards never checked. Python's parser cannot carry duplicates.
+  if (anyDuplicated(names(obj))) envelope_error("envelope repeats a member name")
   v <- obj$v
   if (is.null(v) || is.logical(v) || !is.numeric(v) || v != envelope_version) envelope_error("unsupported envelope version")
   if (!is.null(obj$encoding) && !identical(obj$encoding, "json")) envelope_error("unsupported encoding")
@@ -453,6 +456,7 @@ decode_envelope <- function(obj) {
     op <- obj$operation
     if (!is.character(op) || length(op) != 1 || !grepl(operation_re, op) || nchar(op) > 128) envelope_error("invalid operation name")
     if (!is_json_object(obj$params)) envelope_error("params must be an object")
+    if (anyDuplicated(names(obj$params))) envelope_error("params repeats a member name")
     return(list(kind = "query", operation = op, params = obj$params))
   }
   if (identical(kind, "response")) {

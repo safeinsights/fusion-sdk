@@ -84,7 +84,7 @@ def make_registry() -> tuple[OperationRegistry, dict[str, int]]:
     reg = OperationRegistry()
     calls = {"n": 0}
 
-    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
     def counts_by_group(params: dict[str, Any], ctx: Any) -> Any:
         calls["n"] += 1
         ids = params.get("person_ids", [])
@@ -223,21 +223,29 @@ def test_guards_refuse_loudly_without_partial_results(fake: FakeFactory, setting
     reg = OperationRegistry()
     seen: list[int] = []
 
-    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
     def counts_by_group(params: dict[str, Any], ctx: Any) -> Any:
         seen.append(len(params["person_ids"]))
         small = params.get("small", False)
         return Table.from_columns({"grade": ["9", "10"], "n": [5, 2 if small else 4]})
 
-    @reg.register("two_counts", cardinality="per-group")
-    def two_counts(params: dict[str, Any], ctx: Any) -> Any:
-        return Table.from_columns({"a": [5], "b": [6]})
+    # The count column is never inferred: a per-group operation cannot be registered without it.
+    with pytest.raises(ValueError, match="count_column"):
+        reg.add("two_counts", lambda p, c: Table.from_columns({"a": [5], "b": [6]}), cardinality="per-group")
 
     @reg.register("two_counts_declared", cardinality="per-group", count_column="b")
     def two_counts_declared(params: dict[str, Any], ctx: Any) -> Any:
         return Table.from_columns({"a": [1], "b": [6]})
 
-    @reg.register("per_group_scalar", cardinality="per-group")
+    @reg.register("count_missing", cardinality="per-group", count_column="n")
+    def count_missing(params: dict[str, Any], ctx: Any) -> Any:
+        return Table.from_columns({"a": [5], "b": [6]})
+
+    @reg.register("float_counts", cardinality="per-group", count_column="n")
+    def float_counts(params: dict[str, Any], ctx: Any) -> Any:
+        return Table.from_columns({"year": [2024], "n": [1.0]})  # a key >= limit must not stand in for the count
+
+    @reg.register("per_group_scalar", cardinality="per-group", count_column="n")
     def per_group_scalar(params: dict[str, Any], ctx: Any) -> Any:
         return 7
 
@@ -268,9 +276,12 @@ def test_guards_refuse_loudly_without_partial_results(fake: FakeFactory, setting
         with pytest.raises(RemoteError) as exc:
             peer.request("counts_by_group", {"person_ids": ["a"], "small": True})
         assert exc.value.detail == {"guard": "minGroupSize", "limit": 3}  # no observed: the small cell stays home
-        with pytest.raises(RemoteError, match="count_column"):
-            peer.request("two_counts", {})
         assert peer.request("two_counts_declared", {}).is_table
+        with pytest.raises(RemoteError, match="not in the result"):
+            peer.request("count_missing", {})
+        with pytest.raises(RemoteError) as exc:
+            peer.request("float_counts", {})
+        assert exc.value.detail == {"guard": "minGroupSize", "limit": 3} and "integer column" in exc.value.message
         with pytest.raises(RemoteError, match="fusion table"):
             peer.request("per_group_scalar", {})
         assert peer.request("aggregate_small", {}).is_table  # minGroupSize applies to per-group only
@@ -297,7 +308,7 @@ def test_guards_disabled_when_info_has_none(
 def test_operations_preflight_against_approved_list(fake: FakeFactory, settings: Settings) -> None:
     pair = fake("operations-declared")  # approved: counts_by_group (per-group), total (aggregate)
     reg = OperationRegistry()
-    reg.add("counts_by_group", lambda p, c: 1, cardinality="per-group")
+    reg.add("counts_by_group", lambda p, c: 1, cardinality="per-group", count_column="n")
     reg.add("total", lambda p, c: 1)
     reg.add("extra", lambda p, c: 1)
     with pytest.raises(ConfigError, match="'extra' is registered but not in the approved list"):
@@ -307,7 +318,7 @@ def test_operations_preflight_against_approved_list(fake: FakeFactory, settings:
     with pytest.raises(ConfigError, match="approved as per-group"):
         serve_fn(reg2, pair.env("source"), settings=settings)
     reg3 = OperationRegistry()
-    reg3.add("counts_by_group", lambda p, c: 1, cardinality="per-group")
+    reg3.add("counts_by_group", lambda p, c: 1, cardinality="per-group", count_column="n")
     with pytest.raises(ConfigError, match="'total' is approved but no handler"):
         serve_fn(reg3, pair.env("source"), settings=settings)
     reg3.add("total", lambda p, c: {"ok": True})
@@ -437,7 +448,7 @@ def test_guard_helpers_directly() -> None:
         and distinct_count("x") == 1
         and distinct_count(["a", "a", "b", 1, 1.0, {"k": 1}, {"k": 1}]) == 4
     )
-    spec = OperationSpec("op", lambda p, c: 1, person_id_param="ids", cardinality="per-group")
+    spec = OperationSpec("op", lambda p, c: 1, person_id_param="ids", cardinality="per-group", count_column="n")
     check_query({"ids": ["a", "b"]}, spec, Guards(max_distinct_person_ids=2))
     check_query({"ids": ["a", "b", "c"]}, spec, None)  # disabled
     check_query(
@@ -459,6 +470,16 @@ def test_guard_helpers_directly() -> None:
     null_count = Table.from_columns({"g": ["x"], "n": [None]}, {"n": "integer"}).to_json()
     with pytest.raises(GuardRefused, match="smaller"):
         check_result(null_count, spec, Guards(min_group_size=1))
+    # The count column is never inferred from column types, and must be integer-typed.
+    undeclared = OperationSpec("op", lambda p, c: 1, cardinality="per-group")
+    with pytest.raises(GuardRefused, match="count_column"):
+        check_result(table, undeclared, Guards(min_group_size=1))
+    key_only = Table.from_columns({"year": [2024], "n": [1.0]}).to_json()
+    with pytest.raises(GuardRefused, match="integer column") as exc:
+        check_result(key_only, spec, Guards(min_group_size=11))
+    assert exc.value.detail() == {"guard": "minGroupSize", "limit": 11}
+    with pytest.raises(GuardRefused, match="not in the result"):
+        check_result(Table.from_columns({"year": [2024]}).to_json(), spec, Guards(min_group_size=1))
     assert Guards.from_info(None) is None
     assert Guards.from_info({}) == Guards() and not Guards().enabled
     assert Guards.from_info({"maxDistinctPersonIds": 10, "minGroupSize": True}) == Guards(max_distinct_person_ids=10)

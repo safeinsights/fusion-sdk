@@ -22,7 +22,7 @@ ops <- fusion_operations(
     out <- data.frame(group = names(counts), n = as.integer(counts), stringsAsFactors = FALSE)
     names(out)[1] <- group_by
     out
-  }, person_id_param = "person_ids", cardinality = "per-group"),
+  }, person_id_param = "person_ids", cardinality = "per-group", count_column = "n"),
   mean_score = fusion_operation(function(params, ctx) {
     scores <- sample_data$score[sample_data$person_id %in% unlist(params$person_ids)]
     list(n = length(scores), mean = if (length(scores)) mean(scores) else NULL)

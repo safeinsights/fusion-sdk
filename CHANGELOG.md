@@ -4,6 +4,19 @@ All notable changes to the SafeInsights Fusion SDK (Python `safeinsights-fusion`
 The two packages are released together and share a version. Compatibility with the Fusion Tunnel
 App's local API is tracked in `docs/compatibility.md`.
 
+## Unreleased
+
+### Changed
+
+- `count_column` is required for `cardinality = "per-group"` operations (`OperationRegistry.add` /
+  `register` and `fusion_operation()` refuse to register one without it) and must be an `integer` or
+  `integer64` column. The "single integer column" inference is gone: it let a per-group table whose only
+  integer column was a key such as a year pass `minGroupSize` with its float-typed counts never
+  inspected. Existing per-group registrations without `count_column` must add it.
+- R: a query envelope or its `params` that repeats a member name is refused as an envelope error, so a
+  handler walking the whole list cannot see a member the guards did not check (jsonlite keeps duplicate
+  names; Python's parser cannot).
+
 ## 0.2.0
 
 ### Changed

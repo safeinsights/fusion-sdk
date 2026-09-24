@@ -136,18 +136,19 @@ def check_query(params: Mapping[str, Any], spec: OperationSpec, guards: Guards |
 
 
 def find_count_column(table: Table, declared: str | None) -> str:
-    if declared is not None:
-        if declared not in table.names:
-            raise GuardRefused("minGroupSize", 0, f"declared count column {declared!r} is not in the result")
-        return declared
-    candidates = [c.name for c in table.columns if c.type in ("integer", "integer64")]
-    if len(candidates) != 1:
-        raise GuardRefused(
-            "minGroupSize",
-            0,
-            f"cannot identify the group-count column ({len(candidates)} integer columns); register the operation with count_column",
-        )
-    return candidates[0]
+    """The count column is declared at registration; the guard never guesses it from column types.
+
+    Inferring "the single integer column" let a per-group table whose only integer column was a key
+    (a year, an age) pass with its float-typed counts never inspected.
+    """
+    if declared is None:
+        raise GuardRefused("minGroupSize", 0, "per-group operations must be registered with count_column")
+    if declared not in table.names:
+        raise GuardRefused("minGroupSize", 0, f"declared count column {declared!r} is not in the result")
+    col_type = next(c.type for c in table.columns if c.name == declared)
+    if col_type not in ("integer", "integer64"):
+        raise GuardRefused("minGroupSize", 0, f"count column {declared!r} must be an integer column, not {col_type}")
+    return declared
 
 
 def check_result(body: JSON, spec: OperationSpec, guards: Guards | None) -> None:

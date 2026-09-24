@@ -35,7 +35,7 @@ def _env(role: str) -> dict[str, str]:
 def test_real_tunnel_happy_path() -> None:
     reg = OperationRegistry()
 
-    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+    @reg.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
     def counts(params: dict[str, Any], ctx: Any) -> Table:
         n = len(params["person_ids"])
         return Table.from_columns({"grade": ["9", "10"], "n": [n, n + 5]})

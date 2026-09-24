@@ -11,7 +11,7 @@ in single-threaded R. Optional fault injection lets researchers test their error
     from safeinsights_fusion import OperationRegistry, simulate
 
     ops = OperationRegistry()
-    @ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group")
+    @ops.register("counts_by_group", person_id_param="person_ids", cardinality="per-group", count_column="n")
     def counts_by_group(params, ctx): ...
 
     def analysis(fusion):

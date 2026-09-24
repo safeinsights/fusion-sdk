@@ -5,7 +5,7 @@ sim_ops <- function() {
       calls <<- calls + 1L
       n <- length(params$person_ids)
       data.frame(grade = c("9", "10"), n = c(n, n + 5L))
-    }, person_id_param = "person_ids", cardinality = "per-group"),
+    }, person_id_param = "person_ids", cardinality = "per-group", count_column = "n"),
     total = sifusion::fusion_operation(function(params, ctx) {
       calls <<- calls + 1L
       list(total = 42L, calls = calls, peer = ctx$peer, cid = ctx$correlation_id)

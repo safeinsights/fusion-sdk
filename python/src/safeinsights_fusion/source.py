@@ -110,6 +110,10 @@ class OperationRegistry:
     ) -> OperationSpec:
         if cardinality not in CARDINALITIES:
             raise ValueError(f"cardinality must be one of {CARDINALITIES}")
+        if cardinality == "per-group" and count_column is None:
+            raise ValueError(
+                f"operation {name!r} is per-group and must declare count_column: minGroupSize is checked on that column only"
+            )
         if name in self._ops:
             raise ValueError(f"operation {name!r} is already registered")
         spec = OperationSpec(name, handler, person_id_param, cardinality, count_column, sanitize)

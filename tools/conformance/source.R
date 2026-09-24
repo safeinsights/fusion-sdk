@@ -6,7 +6,7 @@ ops <- fusion_operations(
   counts_by_group = fusion_operation(function(params, ctx) {
     n <- length(params$person_ids)
     data.frame(grade = c("9", "10"), n = c(n, 2L * n + 1L), stringsAsFactors = FALSE)
-  }, person_id_param = "person_ids", cardinality = "per-group"),
+  }, person_id_param = "person_ids", cardinality = "per-group", count_column = "n"),
   total = fusion_operation(function(params, ctx) {
     list(total = 42L, correlation_id = ctx$correlation_id, peer = ctx$peer, operation = ctx$operation)
   }),

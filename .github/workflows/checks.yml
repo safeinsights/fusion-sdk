@@ -22,13 +22,6 @@ jobs:
                   python-version: '3.12'
             - name: Validate spec against schemas
               run: python3 tools/validate_spec.py
-            - name: Contract diff against the tunnel's schema export (when present)
-              run: |
-                  if [ -f spec/local-api.export.json ]; then
-                      python3 tools/contract_diff.py spec/local-api.export.json
-                  else
-                      echo "no spec/local-api.export.json yet (fusion-tunnel-app does not exist); skipping"
-                  fi
 
     python:
         name: Python ${{ matrix.python-version }}

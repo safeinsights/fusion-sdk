@@ -143,8 +143,12 @@ stub_source_transport <- function(outcome) {
   posted <- character(0)
   structure(list(
     endpoint = "stub", peer = "dp-a",
-    info = function() list(api_version = "2.0.0", leg_id = "leg-a", peer_org_slug = "dp-a", role = "source", direction = "dst_to_src",
-                           state = "CHANNEL_UP", guards = NULL, caps = NULL, operations = NULL),
+    info = function() {
+      list(
+        api_version = "2.0.0", leg_id = "leg-a", peer_org_slug = "dp-a", role = "source", direction = "dst_to_src",
+        state = "CHANNEL_UP", guards = NULL, caps = NULL, operations = NULL
+      )
+    },
     submit = function(...) stop("unused"), poll_response = function(...) stop("unused"), abandon = function(...) stop("unused"),
     next_message = function(timeout_s) list(kind = "empty"),
     post_response = function(in_reply_to, payload) {
@@ -169,7 +173,10 @@ test_that("a 409 on the response post drops the round without raising", {
   expect_equal(srv$rounds_served, 0L)
   expect_true(any(grepl("^fusion round.protocol_error peer=dp-a correlationId=c1 messageId=m1$", lines)))
   # A terminal body on the post ends the leg like one on the poll.
-  transport <- stub_source_transport(list(kind = "terminal", code = "LIMIT_EXCEEDED", message = "cap", detail = list(cap = "maxRounds", limit = 1L, observed = 2L)))
+  transport <- stub_source_transport(list(
+    kind = "terminal", code = "LIMIT_EXCEEDED", message = "cap",
+    detail = list(cap = "maxRounds", limit = 1L, observed = 2L)
+  ))
   srv <- sifusion:::new_server(transport, ops, fast_settings(), "x")
   sifusion:::server_start(srv, sifusion:::now_s() + 1)
   e <- tryCatch(sifusion:::server_step(srv, msg), fusion_limit_exceeded_error = function(e) e)

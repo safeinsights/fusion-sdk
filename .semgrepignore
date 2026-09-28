@@ -1,0 +1,11 @@
+# Paths Semgrep does not scan (see the semgrep job in .github/workflows/checks.yml).
+# This file REPLACES Semgrep's built-in default exclusions, so the usual virtualenv and build
+# directories are restated here; .gitignore is honoured separately. Test suites are not
+# shipped, and their fixtures are exactly what the rules exist to flag in real code. The R
+# package is not listed because Semgrep has no R support; lintr and R CMD check cover it.
+.git/
+.venv/
+**/__pycache__/
+dist/
+tests/
+r/.Rproj.user/

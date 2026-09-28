@@ -6,4 +6,5 @@ COPY python/ /sdk/python/
 RUN pip install --no-cache-dir --no-deps /sdk/python \
  && python -c "import safeinsights_fusion, sys; print('safeinsights_fusion', safeinsights_fusion.__version__, sys.version)"
 COPY docker/smoke-python.sh /sdk/smoke.sh
+USER nobody
 ENTRYPOINT ["/bin/sh", "/sdk/smoke.sh"]

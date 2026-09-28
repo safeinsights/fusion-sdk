@@ -23,9 +23,13 @@ export(fusion_settings)
 export(fusion_sim_faults)
 export(fusion_simulate)
 export(fusion_table)
-importFrom(curl,curl_fetch_memory)
-importFrom(curl,handle_setheaders)
-importFrom(curl,handle_setopt)
-importFrom(curl,new_handle)
-importFrom(jsonlite,fromJSON)
-importFrom(jsonlite,toJSON)
+importFrom(curl,
+  curl_fetch_memory,
+  handle_setheaders,
+  handle_setopt,
+  new_handle
+)
+importFrom(jsonlite,
+  fromJSON,
+  toJSON
+)

@@ -33,7 +33,7 @@ python3 tools/validate_spec.py
 cd r && Rscript -e 'roxygen2::roxygenise()' && cd .. && R CMD build r && R CMD check --as-cran sifusion_*.tar.gz
 ```
 
-CI: `checks.yml` runs the spec gate, Python 3.10–3.13, R 4.1 and release, Trivy (vulnerabilities and licenses), Sonar, and the Docker smoke; `matrix.yml` runs the cross-language matrix, fixture parity and the examples; `nightly.yml` runs random fault injection.
+CI: `checks.yml` runs the spec gate, Python 3.10–3.13, R 4.1 and release, Trivy (vulnerabilities and licenses), Semgrep SAST, and the Docker smoke; `matrix.yml` runs the cross-language matrix, fixture parity and the examples; `nightly.yml` runs random fault injection.
 
 ```sh
 python3 tools/matrix.py --r-src r          # {py,r} x {py,r} + mixed-source hub through the fake

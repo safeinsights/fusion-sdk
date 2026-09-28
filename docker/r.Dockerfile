@@ -10,4 +10,5 @@ COPY r/ /sdk/r/
 RUN R CMD INSTALL --no-docs --no-multiarch /sdk/r \
  && Rscript -e 'library(sifusion); cat("sifusion", as.character(packageVersion("sifusion")), R.version.string, "\n")'
 COPY docker/smoke-r.sh /sdk/smoke.sh
+USER nobody
 ENTRYPOINT ["/bin/sh", "/sdk/smoke.sh"]

@@ -1,0 +1,46 @@
+# Environment files
+.env
+
+# System files
+.DS_Store
+.idea
+.vscode/
+*.tern-port
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+python/dist/
+python/build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+.coverage
+htmlcov/
+
+# R
+r/.Rhistory
+r/.RData
+r/.Rproj.user/
+*.Rcheck/
+sifusion_*.tar.gz
+r/docs/
+r/inst/doc/
+
+# Vendored drops and build outputs
+vendor-out/
+sbom/*.json
+
+# Test results
+test-results/
+tmp/
+
+# testthat 3.3 failure snapshots
+r/tests/testthat/_problems/
+r/tests/testthat/testthat-problems.rds

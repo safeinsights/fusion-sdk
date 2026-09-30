@@ -1,0 +1,13 @@
+{
+  "id": "response-ok-missing-body",
+  "description": "body is required on status ok (use null for no result).",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok"
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

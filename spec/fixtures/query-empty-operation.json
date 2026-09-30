@@ -1,0 +1,14 @@
+{
+  "id": "query-empty-operation",
+  "description": "Operation name must be non-empty.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "",
+    "params": {}
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

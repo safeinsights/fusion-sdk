@@ -1,0 +1,22 @@
+{
+  "id": "table-number-string-rejected",
+  "description": "Strings in a number column are rejected.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "x",
+        "type": "number"
+      }
+    ],
+    "rows": [
+      [
+        "3"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

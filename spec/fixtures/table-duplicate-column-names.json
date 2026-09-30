@@ -1,0 +1,27 @@
+{
+  "id": "table-duplicate-column-names",
+  "description": "Column names are unique.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "a",
+        "type": "string"
+      },
+      {
+        "name": "a",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        "x",
+        1
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

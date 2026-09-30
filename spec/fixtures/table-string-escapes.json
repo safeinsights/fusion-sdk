@@ -1,0 +1,43 @@
+{
+  "id": "table-string-escapes",
+  "description": "Strings with quotes, backslashes, newlines, tabs, emoji and an empty string.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "s",
+        "type": "string"
+      }
+    ],
+    "rows": [
+      [
+        "say \"hi\""
+      ],
+      [
+        "back\\slash"
+      ],
+      [
+        "line\nbreak\ttab"
+      ],
+      [
+        "🧬 génome"
+      ],
+      [
+        ""
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 5,
+    "ncol": 1,
+    "names": [
+      "s"
+    ],
+    "types": [
+      "string"
+    ]
+  }
+}

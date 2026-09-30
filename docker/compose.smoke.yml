@@ -1,0 +1,54 @@
+# Docker smoke profile (checks.yml `docker-smoke`): a fake tunnel pair plus one smoke
+# container per language, each built from the stock base image the Data Partner
+# images are expected to derive from. Run from the repo root:
+#
+#   docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-python smoke-python fake
+#   docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-r smoke-r fake
+services:
+    fake:
+        build:
+            context: ..
+            dockerfile: docker/fake.Dockerfile
+        read_only: true
+
+    smoke-python:
+        build:
+            context: ..
+            dockerfile: docker/python.Dockerfile
+        depends_on: [fake]
+        read_only: true
+        tmpfs: [/tmp]
+        environment:
+            FUSION_ROLE: destination
+            FUSION_TUNNEL_ENDPOINT: http://fake:8471
+            FUSION_TUNNEL_TOKEN: fake-leg-a-destination
+            FUSION_READY_TIMEOUT_S: '60'
+
+    smoke-r:
+        build:
+            context: ..
+            dockerfile: docker/r.Dockerfile
+        depends_on: [fake]
+        read_only: true
+        tmpfs: [/tmp]
+        environment:
+            FUSION_ROLE: source
+            FUSION_TUNNEL_ENDPOINT: http://fake:8472
+            FUSION_TUNNEL_TOKEN: fake-leg-a-source
+            FUSION_READY_TIMEOUT_S: '60'
+
+    # Same smoke on the ECR Public mirror of r-base, for images that must not pull from Docker Hub.
+    smoke-r-ecr:
+        build:
+            context: ..
+            dockerfile: docker/r.Dockerfile
+            args:
+                R_BASE_IMAGE: public.ecr.aws/docker/library/r-base:latest
+        depends_on: [fake]
+        read_only: true
+        tmpfs: [/tmp]
+        environment:
+            FUSION_ROLE: source
+            FUSION_TUNNEL_ENDPOINT: http://fake:8472
+            FUSION_TUNNEL_TOKEN: fake-leg-a-source
+            FUSION_READY_TIMEOUT_S: '60'

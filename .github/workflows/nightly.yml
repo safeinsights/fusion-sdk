@@ -1,0 +1,48 @@
+# SECURITY: see the header in checks.yml; the same checkout, permissions and pinning rules apply.
+name: Nightly chaos
+on:
+    schedule:
+        - cron: '17 3 * * *'
+    workflow_dispatch:
+        inputs:
+            seeds:
+                description: number of random scenarios
+                default: '6'
+            seed:
+                description: replay one seed (optional)
+                default: ''
+
+jobs:
+    chaos:
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  r-version: 'release'
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  working-directory: r
+            - name: Install both packages
+              run: |
+                  pip install ./python
+                  R CMD INSTALL --no-docs r
+            - name: Chaos
+              env:
+                  SEED: ${{ github.event.inputs.seed }}
+                  SEEDS: ${{ github.event.inputs.seeds || '6' }}
+              run: |
+                  if [ -n "$SEED" ]; then
+                      python3 tools/chaos.py --py-installed --seed "$SEED"
+                  else
+                      python3 tools/chaos.py --py-installed --seeds "$SEEDS"
+                  fi

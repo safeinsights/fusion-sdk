@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+python/dist
+python/build
+r/.Rproj.user
+*.Rcheck
+sifusion_*.tar.gz
+.claude

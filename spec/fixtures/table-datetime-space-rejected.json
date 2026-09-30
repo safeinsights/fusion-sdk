@@ -1,0 +1,22 @@
+{
+  "id": "table-datetime-space-rejected",
+  "description": "The T separator is required.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18 12:00:00Z"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

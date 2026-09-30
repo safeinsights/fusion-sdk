@@ -1,0 +1,17 @@
+{
+  "id": "query-params-not-object",
+  "description": "params must be a JSON object.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": [
+      1,
+      2
+    ]
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

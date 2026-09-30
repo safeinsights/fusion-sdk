@@ -1,0 +1,42 @@
+{
+  "id": "table-nulls-only",
+  "description": "A column that is entirely null keeps its declared type.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "x",
+        "type": "number"
+      },
+      {
+        "name": "s",
+        "type": "string"
+      }
+    ],
+    "rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 2,
+    "ncol": 2,
+    "names": [
+      "x",
+      "s"
+    ],
+    "types": [
+      "number",
+      "string"
+    ]
+  }
+}

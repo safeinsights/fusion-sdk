@@ -1,0 +1,91 @@
+{
+  "id": "table-all-types",
+  "description": "Every column type with a value and a null.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "s",
+        "type": "string"
+      },
+      {
+        "name": "i",
+        "type": "integer"
+      },
+      {
+        "name": "i64",
+        "type": "integer64"
+      },
+      {
+        "name": "x",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      },
+      {
+        "name": "d",
+        "type": "date"
+      },
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "a",
+        1,
+        "9007199254740993",
+        1.5,
+        true,
+        "2024-02-29",
+        "2026-09-18T12:00:00Z"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        "",
+        -7,
+        "-9223372036854775808",
+        -0.25,
+        false,
+        "1970-01-01",
+        "1999-12-31T23:59:59.999Z"
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 3,
+    "ncol": 7,
+    "names": [
+      "s",
+      "i",
+      "i64",
+      "x",
+      "b",
+      "d",
+      "t"
+    ],
+    "types": [
+      "string",
+      "integer",
+      "integer64",
+      "number",
+      "boolean",
+      "date",
+      "datetime"
+    ]
+  }
+}

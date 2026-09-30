@@ -1,0 +1,96 @@
+# SECURITY: see the header in checks.yml; the same checkout, permissions and pinning rules
+# apply. This workflow is the one that publishes, so the pins matter most here: `publish-pypi`
+# holds `id-token: write` (PyPI trusted publishing) and `github-release` holds
+# `contents: write`, and neither job checks out or runs repository code.
+name: Release
+on:
+    push:
+        tags: ['v*']
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  r-version: 'release'
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  working-directory: r
+            - name: Versions must match the tag
+              run: |
+                  tag="${GITHUB_REF_NAME#v}"
+                  py="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' python/src/safeinsights_fusion/__init__.py)"
+                  r="$(sed -n 's/^Version: //p' r/DESCRIPTION)"
+                  echo "tag=$tag python=$py r=$r"
+                  [ "$tag" = "$py" ] && [ "$tag" = "$r" ]
+            - name: Build Python sdist and wheel
+              run: uv build --project python --out-dir dist
+            - name: Build R source package
+              run: R CMD build r && mv sifusion_*.tar.gz dist/
+            - name: SBOM (CycloneDX)
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  format: 'cyclonedx'
+                  output: 'dist/fusion-sdk-sbom.cdx.json'
+                  version: v0.70.0
+                  cache-dir: ${{ github.workspace }}/.cache/trivy
+            - name: License gate
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  scanners: 'license'
+                  severity: 'HIGH,CRITICAL'
+                  exit-code: '1'
+                  trivyignores: '.trivyignore.yaml'
+                  version: v0.70.0
+                  cache-dir: ${{ github.workspace }}/.cache/trivy
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: dist
+                  path: dist/
+
+    publish-pypi:
+        needs: build
+        runs-on: ubuntu-latest
+        environment: pypi
+        permissions:
+            id-token: write # trusted publishing
+        steps:
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: dist
+                  path: dist
+            - name: Keep only the Python artifacts
+              run: mkdir py && mv dist/*.whl dist/*.tar.gz py/ && rm -f py/sifusion_*.tar.gz
+            - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+              with:
+                  packages-dir: py/
+
+    github-release:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: dist
+                  path: dist
+            - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+              with:
+                  files: dist/*
+                  generate_release_notes: true

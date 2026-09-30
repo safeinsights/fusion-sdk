@@ -1,0 +1,37 @@
+{
+  "id": "table-boolean",
+  "description": "Booleans with a null.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "rows": [
+      [
+        true
+      ],
+      [
+        false
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 3,
+    "ncol": 1,
+    "names": [
+      "b"
+    ],
+    "types": [
+      "boolean"
+    ]
+  }
+}

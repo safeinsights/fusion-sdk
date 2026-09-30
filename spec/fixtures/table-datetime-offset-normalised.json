@@ -1,0 +1,51 @@
+{
+  "id": "table-datetime-offset-normalised",
+  "description": "An explicit offset is accepted and normalised to UTC.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18T12:00:00+02:00"
+      ],
+      [
+        "2026-09-18T12:00:00.5-05:30"
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "t",
+        "type": "datetime"
+      }
+    ],
+    "rows": [
+      [
+        "2026-09-18T10:00:00Z"
+      ],
+      [
+        "2026-09-18T17:30:00.500Z"
+      ]
+    ]
+  },
+  "decoded": {
+    "nrow": 2,
+    "ncol": 1,
+    "names": [
+      "t"
+    ],
+    "types": [
+      "datetime"
+    ]
+  }
+}

@@ -1,0 +1,219 @@
+# SECURITY: this workflow runs on `pull_request`, so it executes PR-controlled code (uv sync,
+# R package installs, tests, the Docker smoke). The same rules as management-app (OTTER-545)
+# apply:
+#
+#   1. Every `actions/checkout` sets `persist-credentials: false` so no usable GITHUB_TOKEN is
+#      left on disk for a malicious install hook or test fixture to read.
+#   2. Every job's `permissions:` block is the minimum that job needs.
+#   3. Third-party actions are pinned to commit SHAs (version tag in a trailing comment) and
+#      Semgrep to a hash-locked requirements file, so nothing can be repointed underneath
+#      us. Dependabot (.github/dependabot.yml) keeps the pins current.
+#
+# The scanners (Trivy, Semgrep) run in their own jobs, apart from anything that installs or
+# runs PR-supplied code. Neither scanner needs a secret, which is also why they run unchanged
+# on fork and Dependabot PRs.
+name: Checks
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+# A newer PR commit cancels the older run. Push runs get a unique group so they always finish.
+concurrency:
+    group: ${{ github.event_name == 'pull_request' && format('checks-{0}', github.ref) || format('checks-{0}', github.run_id) }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+    UV_LOCKED: '1'
+
+jobs:
+    spec:
+        name: Spec (fixtures + scenarios)
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+              with:
+                  python-version: '3.12'
+            - name: Validate spec against schemas
+              run: python3 tools/validate_spec.py
+
+    python:
+        name: Python ${{ matrix.python-version }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ['3.10', '3.11', '3.12', '3.13']
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+              with:
+                  enable-cache: true
+                  python-version: ${{ matrix.python-version }}
+            - name: Install
+              run: uv sync --group dev
+            - name: Lint
+              run: uv run ruff check .
+            - name: Format
+              run: uv run ruff format --check .
+            - name: Typecheck
+              run: uv run mypy
+            - name: Test
+              run: uv run pytest -q
+            - name: Build
+              run: uv build --project python --out-dir dist
+            - name: Install the wheel into a clean interpreter and import it
+              run: |
+                  uv venv --python ${{ matrix.python-version }} /tmp/clean
+                  uv pip install --python /tmp/clean/bin/python dist/*.whl
+                  /tmp/clean/bin/python -c "import safeinsights_fusion; print(safeinsights_fusion.__version__)"
+
+    r:
+        name: R ${{ matrix.r-version }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                r-version: ['4.1', 'release']
+        env:
+            R_KEEP_PKG_SOURCE: yes
+            _R_CHECK_FORCE_SUGGESTS_: false
+            FUSION_SDK_ROOT: ${{ github.workspace }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-pandoc@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+            - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  r-version: ${{ matrix.r-version }}
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  working-directory: r
+                  extra-packages: any::rcmdcheck, any::lintr, any::roxygen2, any::pkgload
+                  needs: check
+            - name: Roxygen is current
+              working-directory: r
+              run: |
+                  Rscript -e 'roxygen2::roxygenise()'
+                  git diff --exit-code -- NAMESPACE man
+            - name: Lint
+              working-directory: r
+              # object_usage_linter needs the namespace loaded to resolve internal functions.
+              run: Rscript -e 'pkgload::load_all(quiet = TRUE); lints <- lintr::lint_package(); print(lints); if (length(lints) > 0) quit(status = 1)'
+            - uses: r-lib/actions/check-r-package@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  working-directory: r
+                  args: 'c("--as-cran", "--no-manual")'
+                  error-on: '"warning"'
+                  upload-snapshots: true
+
+    trivy:
+        name: Trivy (vulnerabilities, secrets, licenses)
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            # Trivy downloads its binary and vulnerability DB on every run and flakes when an
+            # upstream fetch fails. Pinning `version` keeps trivy-action's built-in cache key
+            # stable across runs, and one shared `cache-dir` means the DB is fetched at most
+            # once per run. A version bump naturally busts the cache.
+            - name: Run Trivy vulnerability scanner in fs mode
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  trivy-config: trivy.yaml
+                  version: v0.70.0
+                  cache-dir: ${{ github.workspace }}/.cache/trivy
+            - name: Run Trivy license scanner
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  scanners: 'license'
+                  severity: 'HIGH,CRITICAL'
+                  exit-code: '1'
+                  trivyignores: '.trivyignore.yaml'
+                  version: v0.70.0
+                  cache-dir: ${{ github.workspace }}/.cache/trivy
+
+    # SAST with Semgrep Community Edition: public rulesets, no account, no token, so there is
+    # nothing here to steal. `--error` fails the job on any finding. Silence a false positive
+    # in the source with `# nosemgrep: <rule-id>` plus a one-line reason, never by loosening
+    # this command. .semgrepignore lists what is not scanned (tests, virtualenvs, build output).
+    # Semgrep has no R support; the R package is covered by lintr and R CMD check above.
+    semgrep:
+        name: Semgrep SAST
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+              with:
+                  python-version: '3.12'
+            # Hash-locked install, the pip equivalent of a SHA pin: neither semgrep nor a
+            # transitive dependency can change underneath us. Dependabot's pip entry keeps the
+            # lock current; .github/semgrep/semgrep.in says how to regenerate it by hand.
+            - name: Install Semgrep
+              run: pip install --quiet --require-hashes --requirement .github/semgrep/requirements.txt
+            # p/ci is Semgrep's curated high-confidence set; the Python, Dockerfile and GitHub
+            # Actions packs add the remaining rules for what this repo contains. The uv
+            # cooldown rule wants `exclude-newer = "7 days"` under [tool.uv]; whether the SDK
+            # adopts a dependency cooldown (the org's pnpm repos use 2 days) is a policy
+            # decision for the team, not one to settle in a scanner flag, so that rule is
+            # excluded here until it is made.
+            - name: Semgrep
+              run: >-
+                  semgrep scan
+                  --config p/ci
+                  --config p/python
+                  --config p/dockerfile
+                  --config p/github-actions
+                  --exclude-rule package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
+                  --metrics=off --error --text .
+
+    docker-smoke:
+        name: Docker smoke (python:3.12-slim, r-base)
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: [python, r]
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - name: Build and run the smoke profile
+              run: docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-python smoke-python fake
+            - name: Run the R smoke
+              run: docker compose -f docker/compose.smoke.yml up --build --abort-on-container-exit --exit-code-from smoke-r smoke-r fake
+            - name: Tear down
+              if: always()
+              run: docker compose -f docker/compose.smoke.yml down -v

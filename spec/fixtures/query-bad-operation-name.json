@@ -1,0 +1,14 @@
+{
+  "id": "query-bad-operation-name",
+  "description": "Operation names start with a letter or underscore and contain no spaces.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "9bad name",
+    "params": {}
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

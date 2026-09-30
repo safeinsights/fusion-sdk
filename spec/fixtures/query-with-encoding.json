@@ -1,0 +1,18 @@
+{
+  "id": "query-with-encoding",
+  "description": "Explicit encoding json.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": {},
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "query",
+    "operation": "count"
+  }
+}

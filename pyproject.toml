@@ -1,0 +1,83 @@
+# Repo-root dev workspace. The publishable package lives in python/ (its own pyproject);
+# this file exists so `uv sync` + `uv run {ruff,mypy,pytest}` from the root cover
+# python/src, python/tests and tools/ with one configuration.
+[project]
+name = "fusion-sdk-workspace"
+version = "0.0.0"
+description = "Dev workspace for the SafeInsights Fusion SDK (not published)"
+requires-python = ">=3.10"
+dependencies = ["safeinsights-fusion"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["python"]
+
+[tool.uv.sources]
+safeinsights-fusion = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-timeout>=2.3",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pandas>=2.0",
+    "pandas-stubs>=2.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["python/src", "tools"]
+extend-exclude = [".venv", "r", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "T20", "S"]
+ignore = [
+    "E501",     # line length is the formatter's job; long string literals are allowed
+    "PLR0911",  # return/branch/positional-arg counts are noise for decoders, validators and HTTP handlers
+    "PLR0912",
+    "PLR0917",
+    "PLC0415",  # lazy imports of optional dependencies (pandas) are deliberate
+    "PLR0913",  # many arguments on public constructors is deliberate here
+    "PLR2004",  # magic-value comparisons: HTTP status codes read better inline
+    "S101",     # asserts are used in tests and the fake
+    "RUF012",   # mutable class attributes on http.server handler subclasses
+    "S104",     # binding 0.0.0.0 is an explicit CLI opt-in for the docker smoke
+    "PLW0603",  # module-level registry uses `global` intentionally
+]
+
+[tool.ruff.lint.per-file-ignores]
+"python/tests/**" = ["S", "PLR", "T20", "B011"]
+"tools/tests/**" = ["S", "PLR", "T20", "B011"]
+"tools/fake_tunnel_pair/**" = ["PLR0911", "PLR0912", "PLR0915", "T20", "S311", "PLR0914"]
+"tools/*.py" = ["T20", "PLR0912", "PLR0915", "S603", "S607", "S311"]
+"tools/conformance/**" = ["T20", "S", "PLR"]
+"python/src/safeinsights_fusion/__main__.py" = ["T20"]
+"python/src/safeinsights_fusion/_log.py" = ["T20"]
+"examples/**" = ["T20", "S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["safeinsights_fusion", "fake_tunnel_pair"]
+
+[tool.mypy]
+strict = true
+files = ["python/src", "python/tests", "tools"]
+mypy_path = "python/src:tools"
+namespace_packages = true
+explicit_package_bases = true
+warn_unreachable = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests", "tools/tests"]
+pythonpath = ["tools"]
+timeout = 180
+addopts = "-ra --import-mode=importlib"
+filterwarnings = ["error::DeprecationWarning:safeinsights_fusion.*"]

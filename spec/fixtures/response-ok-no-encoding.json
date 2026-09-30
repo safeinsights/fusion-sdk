@@ -1,0 +1,25 @@
+{
+  "id": "response-ok-no-encoding",
+  "description": "encoding defaults to json on responses too.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": 1
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": 1,
+    "encoding": "json"
+  },
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": false
+  }
+}

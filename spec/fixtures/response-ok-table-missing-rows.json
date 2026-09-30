@@ -1,0 +1,17 @@
+{
+  "id": "response-ok-table-missing-rows",
+  "description": "A marked table needs columns and rows.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "__table__": 1,
+      "columns": []
+    }
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

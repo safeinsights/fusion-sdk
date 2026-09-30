@@ -1,0 +1,22 @@
+{
+  "id": "table-date-with-time-rejected",
+  "description": "A date column does not accept a datetime.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "d",
+        "type": "date"
+      }
+    ],
+    "rows": [
+      [
+        "2026-01-01T00:00:00Z"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

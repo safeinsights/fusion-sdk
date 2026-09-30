@@ -1,0 +1,22 @@
+{
+  "id": "table-boolean-string-rejected",
+  "description": "The string 'true' is not a boolean.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "rows": [
+      [
+        "true"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

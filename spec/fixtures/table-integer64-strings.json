@@ -1,0 +1,37 @@
+{
+  "id": "table-integer64-strings",
+  "description": "integer64 cells are decimal strings, optionally signed.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer64"
+      }
+    ],
+    "rows": [
+      [
+        "0"
+      ],
+      [
+        "-1"
+      ],
+      [
+        "9223372036854775807"
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 3,
+    "ncol": 1,
+    "names": [
+      "n"
+    ],
+    "types": [
+      "integer64"
+    ]
+  }
+}

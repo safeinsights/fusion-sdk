@@ -1,0 +1,18 @@
+{
+  "id": "response-ok-table-marker-wrong",
+  "description": "A body carrying __table__ must be a valid table.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "__table__": 2,
+      "columns": [],
+      "rows": []
+    }
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

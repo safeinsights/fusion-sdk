@@ -1,0 +1,44 @@
+{
+  "id": "response-ok-empty-table",
+  "description": "Zero rows keeps its column types.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "ok",
+    "body": {
+      "__table__": 1,
+      "columns": [
+        {
+          "name": "grade",
+          "type": "string"
+        },
+        {
+          "name": "n",
+          "type": "integer"
+        }
+      ],
+      "rows": []
+    },
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "response",
+    "status": "ok",
+    "bodyIsTable": true,
+    "table": {
+      "nrow": 0,
+      "ncol": 2,
+      "names": [
+        "grade",
+        "n"
+      ],
+      "types": [
+        "string",
+        "integer"
+      ]
+    }
+  }
+}

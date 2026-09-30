@@ -1,0 +1,1 @@
+{"id":"hub-three-legs","description":"Three legs, no faults.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"},{"legId":"leg-b","peerOrgSlug":"dp-b"},{"legId":"leg-c","peerOrgSlug":"dp-c"}],"longpollMs":300}

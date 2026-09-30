@@ -1,0 +1,47 @@
+# SECURITY: see the header in checks.yml; the same checkout, permissions and pinning rules apply.
+name: Cross-language matrix
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+concurrency:
+    group: ${{ github.event_name == 'pull_request' && format('matrix-{0}', github.ref) || format('matrix-{0}', github.run_id) }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+    matrix:
+        name: Py/R destination x source, hub, fixture parity
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+              with:
+                  python-version: '3.12'
+            - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  r-version: 'release'
+                  use-public-rspm: true
+            - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+              with:
+                  working-directory: r
+            - name: Install both packages
+              run: |
+                  pip install ./python
+                  R CMD INSTALL --no-docs r
+            - name: Fixture parity gate
+              run: python3 tools/matrix.py --fixtures --py-installed
+            - name: Matrix (happy) + hub with mixed sources
+              run: python3 tools/matrix.py --py-installed --rounds 2
+            - name: Examples under the simulator and against the fake
+              run: python3 tools/run_examples.py --py-installed
+            - name: Matrix (fault scenarios)
+              run: |
+                  for s in backpressure transient-errors timeout-reissue restart-404 redeliver-query; do
+                      python3 tools/matrix.py --py-installed --no-hub --scenario "$s" --rounds 3 || exit 1
+                  done

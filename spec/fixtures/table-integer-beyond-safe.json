@@ -1,0 +1,22 @@
+{
+  "id": "table-integer-beyond-safe",
+  "description": "Integers beyond 2^53 must use integer64 strings; as numbers they are rejected.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        9007199254740993
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

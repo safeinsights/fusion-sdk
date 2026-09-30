@@ -1,0 +1,1 @@
+{"id":"backpressure","description":"One 429 on the first submit and on the first response post.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":500,"faults":{"backpressureOnRequest":[1],"backpressureOnRespond":[1]}}

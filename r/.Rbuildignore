@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.lintr$
+^vendor\.R$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^README\.Rmd$
+^cran-comments\.md$
+^_pkgdown\.yml$

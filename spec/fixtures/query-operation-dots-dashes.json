@@ -1,0 +1,18 @@
+{
+  "id": "query-operation-dots-dashes",
+  "description": "Operation names may contain dots, dashes and underscores after the first character.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "dp_a.counts-v2",
+    "params": {},
+    "encoding": "json"
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "kind": "query",
+    "operation": "dp_a.counts-v2"
+  }
+}

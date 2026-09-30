@@ -1,0 +1,15 @@
+{
+  "id": "query-bad-encoding",
+  "description": "arrow is reserved for v1.1 and rejected in v1.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "query",
+    "operation": "count",
+    "params": {},
+    "encoding": "arrow"
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

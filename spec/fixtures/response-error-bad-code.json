@@ -1,0 +1,17 @@
+{
+  "id": "response-error-bad-code",
+  "description": "Unknown remote codes are rejected.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "OOPS",
+      "message": "x"
+    }
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

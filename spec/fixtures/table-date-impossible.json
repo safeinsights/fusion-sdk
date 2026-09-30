@@ -1,0 +1,22 @@
+{
+  "id": "table-date-impossible",
+  "description": "February 30 does not exist.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "d",
+        "type": "date"
+      }
+    ],
+    "rows": [
+      [
+        "2026-02-30"
+      ]
+    ]
+  },
+  "valid": false,
+  "schemaValid": true,
+  "error": "DECODE"
+}

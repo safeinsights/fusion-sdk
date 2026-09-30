@@ -1,0 +1,31 @@
+{
+  "id": "table-one-cell",
+  "description": "1 x 1 table.",
+  "kind": "table",
+  "input": {
+    "__table__": 1,
+    "columns": [
+      {
+        "name": "n",
+        "type": "integer"
+      }
+    ],
+    "rows": [
+      [
+        3
+      ]
+    ]
+  },
+  "valid": true,
+  "schemaValid": true,
+  "decoded": {
+    "nrow": 1,
+    "ncol": 1,
+    "names": [
+      "n"
+    ],
+    "types": [
+      "integer"
+    ]
+  }
+}

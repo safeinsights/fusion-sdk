@@ -1,0 +1,1 @@
+{"id":"slow-source","description":"Query 2 held 3 s at the source tunnel.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"}],"longpollMs":300,"faults":{"delayDeliveryMs":{"2":3000}}}

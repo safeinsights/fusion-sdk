@@ -1,0 +1,22 @@
+format: table
+exit-code: 1
+debug: false
+severity:
+    - HIGH
+    - CRITICAL
+scan:
+    scanners:
+        - vuln
+        - secret
+    skip-dirs:
+        - .git
+        - .venv
+        - python/.venv
+        - r/.Rproj.user
+    skip-files:
+        - .env
+misconfiguration:
+    scanners:
+        - dockerfile
+pkg:
+    include-dev-deps: true

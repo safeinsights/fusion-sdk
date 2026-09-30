@@ -1,0 +1,1 @@
+{"id":"hub-two-legs","description":"Two legs; leg B is capped at one round.","legs":[{"legId":"leg-a","peerOrgSlug":"dp-a"},{"legId":"leg-b","peerOrgSlug":"dp-b","caps":{"maxRounds":1}}],"longpollMs":300}

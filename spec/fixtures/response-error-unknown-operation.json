@@ -1,0 +1,37 @@
+{
+  "id": "response-error-unknown-operation",
+  "description": "Error envelope: no such handler.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "UNKNOWN_OPERATION",
+      "message": "no handler registered for operation",
+      "detail": {
+        "operation": "nope"
+      }
+    }
+  },
+  "valid": true,
+  "schemaValid": true,
+  "canonical": {
+    "v": 1,
+    "kind": "response",
+    "status": "error",
+    "error": {
+      "code": "UNKNOWN_OPERATION",
+      "message": "no handler registered for operation",
+      "detail": {
+        "operation": "nope"
+      }
+    },
+    "encoding": "json"
+  },
+  "decoded": {
+    "kind": "response",
+    "status": "error",
+    "code": "UNKNOWN_OPERATION"
+  }
+}

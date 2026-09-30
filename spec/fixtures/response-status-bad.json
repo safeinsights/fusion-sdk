@@ -1,0 +1,14 @@
+{
+  "id": "response-status-bad",
+  "description": "status is ok or error.",
+  "kind": "envelope",
+  "input": {
+    "v": 1,
+    "kind": "response",
+    "status": "maybe",
+    "body": 1
+  },
+  "valid": false,
+  "schemaValid": false,
+  "error": "DECODE"
+}

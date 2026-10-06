@@ -1,5 +1,5 @@
 # Hub fusion study, SOURCE A (Data Partner A, in R). Answers which of the requested people it knows.
-library(sifusion)
+library(safeinsights.fusion)
 
 known <- c("p-001", "p-002", "p-003", "p-004")
 

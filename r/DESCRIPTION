@@ -1,6 +1,6 @@
-Package: sifusion
+Package: safeinsights.fusion
 Title: SafeInsights Fusion SDK
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(
     person("SafeInsights", role = c("aut", "cre", "cph"), email = "support@safeinsights.org"))
 Description: Researcher-facing client for the SafeInsights Enclave Fusion

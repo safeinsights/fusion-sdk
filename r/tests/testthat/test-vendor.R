@@ -3,19 +3,19 @@ test_that("the vendored drop loads with source() and round-trips an envelope", {
   root <- fusion_sdk_root()
   out <- tempfile("vendored")
   res <- system2(rscript_bin(), c(shQuote(file.path(root, "r", "vendor.R")), shQuote(out)), stdout = TRUE, stderr = TRUE)
-  expect_match(paste(res, collapse = "\n"), "vendored sifusion")
-  expect_true(file.exists(file.path(out, "sifusion.R")))
-  expect_true(file.exists(file.path(out, "sifusion", "envelope.R")))
+  expect_match(paste(res, collapse = "\n"), "vendored safeinsights.fusion")
+  expect_true(file.exists(file.path(out, "safeinsights.fusion.R")))
+  expect_true(file.exists(file.path(out, "safeinsights.fusion", "envelope.R")))
   expect_false(file.exists(file.path(out, "source.R"))) # package files never collide with researcher files
   script <- tempfile(fileext = ".R")
   writeLines(c(
-    sprintf('source("%s")', file.path(out, "sifusion.R")),
+    sprintf('source("%s")', file.path(out, "safeinsights.fusion.R")),
     "q <- encode_query('counts_by_group', list(person_ids = c('a', 'b')))",
     "d <- decode_envelope(decode_json(encode_json(q)))",
     "stopifnot(d$kind == 'query', d$operation == 'counts_by_group', length(d$params$person_ids) == 2)",
     "df <- fusion_as_data_frame(decode_json(encode_json(fusion_table(data.frame(g = '9', n = 1L)))))",
     "stopifnot(nrow(df) == 1, df$n == 1L)",
-    "cat('vendored ok', .sifusion_vendored_version, '\\n')"
+    "cat('vendored ok', .safeinsights_fusion_vendored_version, '\\n')"
   ), script)
   res <- system2(rscript_bin(), shQuote(script), stdout = TRUE, stderr = TRUE)
   expect_match(paste(res, collapse = "\n"), "vendored ok")

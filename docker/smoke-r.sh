@@ -15,4 +15,4 @@ for (i in 1:30) {
 if (!ok) stop("fake tunnel never became reachable")
 cat("fake tunnel reachable: 200\n")
 R
-Rscript -e 'quit(status = if (isTRUE(sifusion::fusion_doctor(wait = TRUE))) 0 else 1)'
+Rscript -e 'quit(status = if (isTRUE(safeinsights.fusion::fusion_doctor(wait = TRUE))) 0 else 1)'

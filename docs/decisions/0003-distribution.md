@@ -14,17 +14,21 @@ The research-container image is assembled by `crane mutate` (`iac/management-app
 4. **Out of scope:** the TOA upload helper. Result release stays with the Data Partner package (`osenclave::toa_results_upload()` today).
 5. **License:** AGPL-3.0-or-later, matching setup-app and the Trusted Output App (plan §11 Q9).
 
-## Naming check (2026-09-18, feeds the open A2 decision)
+## Naming check (2026-09-18) and decision A2
 
 | Registry | Name | Result |
 | :-- | :-- | :-- |
 | PyPI | `safeinsights-fusion` / `safeinsights_fusion` | free (404) |
 | PyPI | `fusion-sdk` | **taken** — "JPMC Fusion Developer Tools" 0.0.4; do not use |
-| CRAN | `sifusion` | free (no package page) |
+| CRAN | `safeinsights.fusion` | free (no package page) |
 | CRAN | `fusion` | free, but too generic and easy to squat; not recommended |
-| r-universe | `safeinsights.r-universe.dev` | not yet created |
+| r-universe | `safeinsights.r-universe.dev` | created 2026-10-06 |
 
-Working names (`safeinsights_fusion` / `sifusion`) remain free; A2 stays open for the product owner and is due before Phase 7 publishes anything.
+**A2 decided 2026-10-06** (product owner): the names are `safeinsights-fusion` on PyPI (import
+`safeinsights_fusion`) and `safeinsights.fusion` on r-universe (`https://safeinsights.r-universe.dev`,
+registry repo `safeinsights/safeinsights.r-universe.dev`). The repository is public; releases are cut by
+`release.yml` on `v*` tags (PyPI trusted publishing from the `pypi` environment, R source tarball on the
+GitHub release). The R working name `sifusion` was retired in 0.3.0.
 
 ## Consequences
 

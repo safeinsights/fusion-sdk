@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(sifusion)
+library(safeinsights.fusion)
 
-test_check("sifusion")
+test_check("safeinsights.fusion")

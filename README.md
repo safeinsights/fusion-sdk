@@ -4,7 +4,7 @@ The SafeInsights **Fusion SDK**: the researcher-facing **R** and **Python** libr
 
 Researcher code never touches the transport. On the **destination** side it calls `request(peer, operation, params)` and gets the source's answer back; on the **source** side it registers Data-Partner-approved operation handlers and calls `serve()`. The SDK drives the per-job Fusion Tunnel App's enclave-local API (version 2): submit/poll, duplicate suppression, single in-flight round per peer, same-`correlationId` re-issue on round timeout, typed errors, budget hints, source-side guards, and content-free logging. It also owns the **fusion envelope** that travels inside the tunnel's end-to-end-encrypted payload, so an R source and a Python destination interoperate.
 
-**Status:** 0.2.0 implements local API 2 ([`spec/local-api.md`](spec/local-api.md), mirrored from `fusion-tunnel-app/src/local-api.ts`) and is proven against the in-repo fake tunnel pair; the real-tunnel switch (`FUSION_TEST_ANNOUNCE`) is ready for the tunnel's harness. Package names are working names until decision A2 closes.
+**Status:** 0.3.0 implements local API 2 ([`spec/local-api.md`](spec/local-api.md), mirrored from `fusion-tunnel-app/src/local-api.ts`) and is proven against the in-repo fake tunnel pair; the real-tunnel switch (`FUSION_TEST_ANNOUNCE`) is ready for the tunnel's harness. Package names are final (decision A2, 2026-10-06): `safeinsights-fusion` on PyPI and `safeinsights.fusion` on r-universe.
 
 ## Layout
 
@@ -12,7 +12,7 @@ Researcher code never touches the transport. On the **destination** side it call
 | :-- | :-- |
 | [`spec/`](spec/) | The cross-language contract: envelope JSON Schema, error table, local API 2 mirror, env contract, log vocabulary, golden fixtures, fake-tunnel scenarios. Both test suites load it. |
 | [`python/`](python/) | `safeinsights-fusion` (PyPI). Stdlib only; `[pandas]` extra. |
-| [`r/`](r/) | `sifusion`. Imports: `curl`, `jsonlite`. |
+| [`r/`](r/) | `safeinsights.fusion` (r-universe). Imports: `curl`, `jsonlite`. |
 | [`tools/fake_tunnel_pair/`](tools/fake_tunnel_pair/) | Two local API 2 servers per leg joined by an in-memory relay, with scenario-driven fault injection. `python3 -m fake_tunnel_pair --scenario happy` |
 | [`tools/validate_spec.py`](tools/validate_spec.py) | Stdlib JSON Schema validator that gates `spec/` in CI. |
 | [`docker/`](docker/) | Dependency-footprint smoke on `python:3.12-slim` and `r-base`. |
@@ -30,7 +30,7 @@ uv run mypy
 uv run pytest -q                    # python/tests + tools/tests (starts the fake in-process)
 python3 tools/validate_spec.py
 
-cd r && Rscript -e 'roxygen2::roxygenise()' && cd .. && R CMD build r && R CMD check --as-cran sifusion_*.tar.gz
+cd r && Rscript -e 'roxygen2::roxygenise()' && cd .. && R CMD build r && R CMD check --as-cran safeinsights.fusion_*.tar.gz
 ```
 
 CI: `checks.yml` runs the spec gate, Python 3.10–3.13, R 4.1 and release, Trivy (vulnerabilities and licenses), Semgrep SAST, and the Docker smoke; `matrix.yml` runs the cross-language matrix, fixture parity and the examples; `nightly.yml` runs random fault injection.

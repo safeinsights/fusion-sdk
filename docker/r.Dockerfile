@@ -8,7 +8,7 @@ RUN apt-get update \
 WORKDIR /sdk
 COPY r/ /sdk/r/
 RUN R CMD INSTALL --no-docs --no-multiarch /sdk/r \
- && Rscript -e 'library(sifusion); cat("sifusion", as.character(packageVersion("sifusion")), R.version.string, "\n")'
+ && Rscript -e 'library(safeinsights.fusion); cat("safeinsights.fusion", as.character(packageVersion("safeinsights.fusion")), R.version.string, "\n")'
 COPY docker/smoke-r.sh /sdk/smoke.sh
 USER nobody
 ENTRYPOINT ["/bin/sh", "/sdk/smoke.sh"]

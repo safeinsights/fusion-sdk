@@ -6,7 +6,7 @@
     python3 tools/matrix.py --scenario backpressure --rounds 3
     python3 tools/matrix.py --hub-only           # hub: destination py then r; source A in R, source B in Python
     python3 tools/matrix.py --fixtures           # fixture parity: decode every spec fixture in both languages
-    python3 tools/matrix.py --r-src r            # load the R package from source (dev) instead of library(sifusion)
+    python3 tools/matrix.py --r-src r            # load the R package from source (dev) instead of library(safeinsights.fusion)
 
 Exit status 1 when any cell fails. Prints one table row per cell. Uses tools/conformance/*.
 """
@@ -35,7 +35,7 @@ LANGS = ("py", "r")
 class Toolchain:
     python: str
     rscript: str
-    r_src: str | None  # path to r/ to load from source; None = library(sifusion)
+    r_src: str | None  # path to r/ to load from source; None = library(safeinsights.fusion)
     py_src: bool  # put python/src on PYTHONPATH (dev) instead of relying on an install
 
     def env(self, extra: dict[str, str]) -> dict[str, str]:
@@ -46,7 +46,7 @@ class Toolchain:
                 os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
             )
         if self.r_src:
-            env["SIFUSION_SRC"] = str(Path(self.r_src).resolve())
+            env["SAFEINSIGHTS_FUSION_SRC"] = str(Path(self.r_src).resolve())
         return env
 
     def command(self, lang: str, role: str) -> list[str]:
@@ -207,13 +207,13 @@ for path in sys.argv[1:]:
 print(json.dumps(out))
 """.replace("%r", repr(str(ROOT / "python" / "src")))
     r_code = r"""
-src <- Sys.getenv("SIFUSION_SRC", "")
-if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(sifusion))
+src <- Sys.getenv("SAFEINSIGHTS_FUSION_SRC", "")
+if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(safeinsights.fusion))
 args <- commandArgs(trailingOnly = TRUE)
 out <- list()
 for (path in args) {
   fx <- jsonlite::fromJSON(path, simplifyVector = FALSE)
-  fn <- if (fx$kind == "table") sifusion:::table_from_json else sifusion:::decode_envelope
+  fn <- if (fx$kind == "table") safeinsights.fusion:::table_from_json else safeinsights.fusion:::decode_envelope
   out[[fx$id]] <- tryCatch({ fn(fx$input); "valid" }, fusion_envelope_error = function(e) "invalid")
 }
 cat(jsonlite::toJSON(out, auto_unbox = TRUE))

@@ -37,7 +37,7 @@ jobs:
             - name: Build Python sdist and wheel
               run: uv build --project python --out-dir dist
             - name: Build R source package
-              run: R CMD build r && mv sifusion_*.tar.gz dist/
+              run: R CMD build r && mv safeinsights.fusion_*.tar.gz dist/
             - name: SBOM (CycloneDX)
               uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
@@ -75,7 +75,7 @@ jobs:
                   name: dist
                   path: dist
             - name: Keep only the Python artifacts
-              run: mkdir py && mv dist/*.whl dist/*.tar.gz py/ && rm -f py/sifusion_*.tar.gz
+              run: mkdir py && mv dist/*.whl dist/*.tar.gz py/ && rm -f py/safeinsights.fusion_*.tar.gz
             - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
               with:
                   packages-dir: py/

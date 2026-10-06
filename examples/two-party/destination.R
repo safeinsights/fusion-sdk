@@ -2,7 +2,7 @@
 #
 # `analysis(fusion)` is the whole study. Inside the enclave it connects through the env the Setup
 # App injects; under the simulator it receives a simulated fusion object.
-library(sifusion)
+library(safeinsights.fusion)
 
 # Person IDs the destination already holds (from its own data); the source answers about them.
 my_person_ids <- c("p-001", "p-002", "p-003", "p-004", "p-005", "p-999")

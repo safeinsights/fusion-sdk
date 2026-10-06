@@ -8,5 +8,5 @@ python/dist
 python/build
 r/.Rproj.user
 *.Rcheck
-sifusion_*.tar.gz
+safeinsights.fusion_*.tar.gz
 .claude

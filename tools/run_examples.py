@@ -34,7 +34,7 @@ def env_for(base: dict[str, str], *, r_src: str | None, py_src: bool) -> dict[st
         env["PYTHONPATH"] = str(ROOT / "python" / "src")
     if r_src:
         env["R_PROFILE_USER"] = str(ROOT / "tools" / "r_dev_profile.R")
-        env["SIFUSION_SRC"] = str(Path(r_src).resolve())
+        env["SAFEINSIGHTS_FUSION_SRC"] = str(Path(r_src).resolve())
     return env
 
 
@@ -120,7 +120,7 @@ def run_fake(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rscript", default="Rscript")
-    ap.add_argument("--r-src", default=None, help="load sifusion from this source dir via pkgload (dev)")
+    ap.add_argument("--r-src", default=None, help="load safeinsights.fusion from this source dir via pkgload (dev)")
     ap.add_argument("--py-installed", action="store_true")
     ap.add_argument("--skip-simulator", action="store_true")
     args = ap.parse_args(argv)

@@ -60,7 +60,7 @@ jobs:
             # setup-uv's `version` input defaults to "latest", which would fetch an unpinned uv
             # binary at run time. Pin it (same value in the semgrep job below). Dependabot cannot
             # bump a `with:` input, so bump it by hand and re-run `uv lock` in both projects.
-            - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+            - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
               with:
                   version: '0.12.18'
                   enable-cache: true
@@ -179,7 +179,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   persist-credentials: false
-            - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+            - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
               with:
                   version: '0.12.18' # keep in step with the python job above
             # .github/semgrep is a tiny uv project whose uv.lock pins Semgrep and every transitive

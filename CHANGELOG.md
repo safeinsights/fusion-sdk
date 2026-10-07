@@ -1,13 +1,23 @@
 # Changelog
 
-All notable changes to the SafeInsights Fusion SDK (Python `safeinsights-fusion`, R `sifusion`).
+All notable changes to the SafeInsights Fusion SDK (Python `safeinsights-fusion`, R `safeinsights.fusion`).
 The two packages are released together and share a version. Compatibility with the Fusion Tunnel
 App's local API is tracked in `docs/compatibility.md`.
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-06
+
+First published release: `safeinsights-fusion` on PyPI and `safeinsights.fusion` on r-universe
+(`https://safeinsights.r-universe.dev`), with the wheel, sdist and R source tarball attached to the
+GitHub release `v0.3.0`.
+
 ### Changed
 
+- **R package renamed** from the working name `sifusion` to `safeinsights.fusion` (decision A2,
+  2026-10-06). `library(sifusion)` becomes `library(safeinsights.fusion)`; the vendored drop is
+  `safeinsights.fusion.R` + `safeinsights.fusion/`; the dev override `SIFUSION_SRC` is now
+  `SAFEINSIGHTS_FUSION_SRC`. The Python package name is unchanged.
 - `count_column` is required for `cardinality = "per-group"` operations (`OperationRegistry.add` /
   `register` and `fusion_operation()` refuse to register one without it) and must be an `integer` or
   `integer64` column. The "single integer column" inference is gone: it let a per-group table whose only

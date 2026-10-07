@@ -65,20 +65,20 @@ fake_log_events <- function(fake, leg = 1) vapply(fake_snapshot(fake, leg)$log, 
 
 rscript_bin <- function() file.path(R.home("bin"), "Rscript")
 
-# How a child process gets sifusion: the installed package (R CMD check, CI) or, when this process
+# How a child process gets safeinsights.fusion: the installed package (R CMD check, CI) or, when this process
 # loaded it with pkgload::load_all(), the same source tree.
-sifusion_loader_line <- function() {
-  if (requireNamespace("pkgload", quietly = TRUE) && !is.null(pkgload::dev_meta("sifusion"))) {
-    src_dir <- getNamespaceInfo(asNamespace("sifusion"), "path")
+safeinsights_fusion_loader_line <- function() {
+  if (requireNamespace("pkgload", quietly = TRUE) && !is.null(pkgload::dev_meta("safeinsights.fusion"))) {
+    src_dir <- getNamespaceInfo(asNamespace("safeinsights.fusion"), "path")
     return(sprintf("suppressMessages(pkgload::load_all(\"%s\", quiet = TRUE))", src_dir))
   }
-  "suppressPackageStartupMessages(library(sifusion))"
+  "suppressPackageStartupMessages(library(safeinsights.fusion))"
 }
 
 # Run an R script in a child process; returns a handle with output and exit-code files.
 start_child <- function(code, env = character(0)) {
   script <- tempfile(fileext = ".R")
-  writeLines(c(sifusion_loader_line(), code), script)
+  writeLines(c(safeinsights_fusion_loader_line(), code), script)
   out <- tempfile(fileext = ".log")
   exit_file <- tempfile(fileext = ".exit")
   env <- c(env, R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep), FUSION_SDK_ROOT = fusion_sdk_root())

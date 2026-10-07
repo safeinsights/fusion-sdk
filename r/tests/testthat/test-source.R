@@ -1,20 +1,20 @@
 # Source behavior: fusion_serve() runs in an R child; the destination in this process drives it.
 
 connect_to <- function(fake, settings = fast_settings(), ...) {
-  sifusion::fusion_connect(fake_env(fake, "destination"), settings = settings, ...)
+  safeinsights.fusion::fusion_connect(fake_env(fake, "destination"), settings = settings, ...)
 }
 
 test_that("serve handles every body kind, guards are disabled without info.guards, and STUDY_COMPLETE exits 0", {
   with_fake("happy", {
     src <- start_r_source(fake)
     fusion <- connect_to(fake)
-    peer <- sifusion::fusion_peer(fusion)
-    r <- sifusion::fusion_request(peer, "counts_by_group", list(person_ids = as.character(1:1000)))
-    expect_equal(sifusion::fusion_as_data_frame(r)$n, c(1000L, 2001L))
-    r <- sifusion::fusion_request(peer, "echo_table")
-    expect_equal(sifusion::fusion_as_data_frame(r)$v, c(1.5, 2.5))
-    expect_equal(sifusion::fusion_request(peer, "total")$body$operation, "total")
-    sifusion::fusion_complete(fusion)
+    peer <- safeinsights.fusion::fusion_peer(fusion)
+    r <- safeinsights.fusion::fusion_request(peer, "counts_by_group", list(person_ids = as.character(1:1000)))
+    expect_equal(safeinsights.fusion::fusion_as_data_frame(r)$n, c(1000L, 2001L))
+    r <- safeinsights.fusion::fusion_request(peer, "echo_table")
+    expect_equal(safeinsights.fusion::fusion_as_data_frame(r)$v, c(1.5, 2.5))
+    expect_equal(safeinsights.fusion::fusion_request(peer, "total")$body$operation, "total")
+    safeinsights.fusion::fusion_complete(fusion)
     expect_equal(child_wait(src), 0L)
     out <- child_output(src)
     expect_match(out, "guards.disabled")
@@ -28,12 +28,12 @@ test_that("a redelivered query is answered from the memo without re-running the 
   with_fake("redeliver-query", {
     src <- start_r_source(fake)
     fusion <- connect_to(fake)
-    peer <- sifusion::fusion_peer(fusion)
-    sifusion::fusion_request(peer, "total")
-    sifusion::fusion_request(peer, "total")
+    peer <- safeinsights.fusion::fusion_peer(fusion)
+    safeinsights.fusion::fusion_request(peer, "total")
+    safeinsights.fusion::fusion_request(peer, "total")
     Sys.sleep(0.5)
-    expect_equal(sifusion::fusion_request(peer, "total")$body$calls, 3)
-    sifusion::fusion_complete(fusion)
+    expect_equal(safeinsights.fusion::fusion_request(peer, "total")$body$calls, 3)
+    safeinsights.fusion::fusion_complete(fusion)
     expect_equal(child_wait(src), 0L)
     snap <- fake_snapshot(fake)
     expect_equal(snap$respondCalls, 4)
@@ -60,31 +60,34 @@ ops <- fusion_operations(
   with_fake("guards", {
     src <- start_r_source(fake, ops_code = ops)
     fusion <- connect_to(fake)
-    peer <- sifusion::fusion_peer(fusion)
-    five_distinct <- sifusion::fusion_request(peer, "counts_by_group", list(person_ids = c("a", "b", "c", "d", "e", "a")))
-    expect_s3_class(sifusion::fusion_as_data_frame(five_distinct), "data.frame")
-    e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = c("a", "b", "c", "d", "e", "f"))), fusion_remote_error = function(e) e)
+    peer <- safeinsights.fusion::fusion_peer(fusion)
+    five_distinct <- safeinsights.fusion::fusion_request(peer, "counts_by_group", list(person_ids = c("a", "b", "c", "d", "e", "a")))
+    expect_s3_class(safeinsights.fusion::fusion_as_data_frame(five_distinct), "data.frame")
+    e <- tryCatch(
+      safeinsights.fusion::fusion_request(peer, "counts_by_group", list(person_ids = c("a", "b", "c", "d", "e", "f"))),
+      fusion_remote_error = function(e) e
+    )
     expect_equal(e$code, "GUARD_REFUSED")
     expect_equal(e$detail, list(guard = "maxDistinctPersonIds", limit = 5L, observed = 6L))
     as_object <- as.list(setNames(paste0("p", 1:6), paste0("p", 1:6)))
     nested <- list(as.list(paste0("p", 1:6)))
     for (shape in list(as_object, nested)) {
-      e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = shape)), fusion_remote_error = function(e) e)
+      e <- tryCatch(safeinsights.fusion::fusion_request(peer, "counts_by_group", list(person_ids = shape)), fusion_remote_error = function(e) e)
       expect_equal(e$code, "GUARD_REFUSED")
       expect_equal(e$detail, list(guard = "maxDistinctPersonIds", limit = 5L))
     }
-    e <- tryCatch(sifusion::fusion_request(peer, "counts_by_group", list(person_ids = I("a"), small = TRUE)), fusion_remote_error = function(e) e)
+    e <- tryCatch(safeinsights.fusion::fusion_request(peer, "counts_by_group", list(person_ids = I("a"), small = TRUE)), fusion_remote_error = function(e) e)
     expect_equal(e$detail, list(guard = "minGroupSize", limit = 3L))
-    expect_s3_class(sifusion::fusion_request(peer, "two_counts_declared"), "fusion_response")
-    e <- tryCatch(sifusion::fusion_request(peer, "count_missing"), fusion_remote_error = function(e) e)
+    expect_s3_class(safeinsights.fusion::fusion_request(peer, "two_counts_declared"), "fusion_response")
+    e <- tryCatch(safeinsights.fusion::fusion_request(peer, "count_missing"), fusion_remote_error = function(e) e)
     expect_match(e$remote_message, "not in the result")
-    e <- tryCatch(sifusion::fusion_request(peer, "float_counts"), fusion_remote_error = function(e) e)
+    e <- tryCatch(safeinsights.fusion::fusion_request(peer, "float_counts"), fusion_remote_error = function(e) e)
     expect_equal(e$detail, list(guard = "minGroupSize", limit = 3L))
     expect_match(e$remote_message, "integer column")
-    e <- tryCatch(sifusion::fusion_request(peer, "per_group_scalar"), fusion_remote_error = function(e) e)
+    e <- tryCatch(safeinsights.fusion::fusion_request(peer, "per_group_scalar"), fusion_remote_error = function(e) e)
     expect_match(e$remote_message, "fusion table")
-    expect_s3_class(sifusion::fusion_request(peer, "aggregate_small"), "fusion_response")
-    sifusion::fusion_complete(fusion)
+    expect_s3_class(safeinsights.fusion::fusion_request(peer, "aggregate_small"), "fusion_response")
+    safeinsights.fusion::fusion_complete(fusion)
     expect_equal(child_wait(src), 0L)
     out <- child_output(src)
     expect_match(out, "guards.loaded peer=dp-a maxDistinctPersonIds=5 minGroupSize=3")
@@ -105,8 +108,8 @@ ops <- fusion_operations(
 '
     src <- start_r_source(fake, ops_code = ok_ops)
     fusion <- connect_to(fake)
-    expect_true(sifusion::fusion_request(fusion, "total")$body$ok)
-    sifusion::fusion_complete(fusion)
+    expect_true(safeinsights.fusion::fusion_request(fusion, "total")$body$ok)
+    safeinsights.fusion::fusion_complete(fusion)
     expect_equal(child_wait(src), 0L)
   })
 })
@@ -131,7 +134,7 @@ test_that("LIMIT_EXCEEDED at POST /v1/messages raises from fusion_serve and exit
   with_fake("limit-exceeded-bytes", {
     src <- start_r_source(fake)
     fusion <- connect_to(fake)
-    e <- tryCatch(sifusion::fusion_request(fusion, "total", list(pad = 500)), fusion_limit_exceeded_error = function(e) e)
+    e <- tryCatch(safeinsights.fusion::fusion_request(fusion, "total", list(pad = 500)), fusion_limit_exceeded_error = function(e) e)
     expect_equal(e$cap, "maxResponsePlaintextBytesPerRound")
     expect_true(child_wait(src) != 0L)
     expect_match(child_output(src), "fusion_limit_exceeded_error|LIMIT_EXCEEDED")
@@ -161,15 +164,15 @@ stub_source_transport <- function(outcome) {
 }
 
 test_that("a 409 on the response post drops the round without raising", {
-  ops <- sifusion::fusion_operations(total = function(p, c) list(total = 42L))
+  ops <- safeinsights.fusion::fusion_operations(total = function(p, c) list(total = 42L))
   query <- list(v = 1L, kind = "query", operation = "total", params = structure(list(), names = character(0)), encoding = "json")
   msg <- list(kind = "delivered", message_id = "m1", correlation_id = "c1", payload = query, budget = NULL, received_at = NULL)
-  transport <- stub_source_transport(function() sifusion:::fusion_concurrency_error("409", peer = "dp-a", correlation_id = "c1"))
-  srv <- sifusion:::new_server(transport, ops, fast_settings(), "x")
-  sifusion:::server_start(srv, sifusion:::now_s() + 1)
-  lines <- capture_fusion_log(expect_null(sifusion:::server_step(srv, msg)))
+  transport <- stub_source_transport(function() safeinsights.fusion:::fusion_concurrency_error("409", peer = "dp-a", correlation_id = "c1"))
+  srv <- safeinsights.fusion:::new_server(transport, ops, fast_settings(), "x")
+  safeinsights.fusion:::server_start(srv, safeinsights.fusion:::now_s() + 1)
+  lines <- capture_fusion_log(expect_null(safeinsights.fusion:::server_step(srv, msg)))
   expect_equal(transport$posted(), "c1")
-  expect_null(sifusion:::memo_get(srv$memo, "c1"))
+  expect_null(safeinsights.fusion:::memo_get(srv$memo, "c1"))
   expect_equal(srv$rounds_served, 0L)
   expect_true(any(grepl("^fusion round.protocol_error peer=dp-a correlationId=c1 messageId=m1$", lines)))
   # A terminal body on the post ends the leg like one on the poll.
@@ -177,23 +180,29 @@ test_that("a 409 on the response post drops the round without raising", {
     kind = "terminal", code = "LIMIT_EXCEEDED", message = "cap",
     detail = list(cap = "maxRounds", limit = 1L, observed = 2L)
   ))
-  srv <- sifusion:::new_server(transport, ops, fast_settings(), "x")
-  sifusion:::server_start(srv, sifusion:::now_s() + 1)
-  e <- tryCatch(sifusion:::server_step(srv, msg), fusion_limit_exceeded_error = function(e) e)
+  srv <- safeinsights.fusion:::new_server(transport, ops, fast_settings(), "x")
+  safeinsights.fusion:::server_start(srv, safeinsights.fusion:::now_s() + 1)
+  e <- tryCatch(safeinsights.fusion:::server_step(srv, msg), fusion_limit_exceeded_error = function(e) e)
   expect_equal(e$cap, "maxRounds")
 })
 
 test_that("source config errors", {
-  ops <- sifusion::fusion_operations(total = function(p, c) 1)
+  ops <- safeinsights.fusion::fusion_operations(total = function(p, c) 1)
   with_fake("hub-two-legs", {
-    expect_error(sifusion::fusion_serve(ops, fake_env(fake, "source"), settings = fast_settings()), "exactly one tunnel", class = "fusion_config_error")
+    expect_error(
+      safeinsights.fusion::fusion_serve(ops, fake_env(fake, "source"), settings = fast_settings()),
+      "exactly one tunnel", class = "fusion_config_error"
+    )
   })
   with_fake("happy", {
-    expect_error(sifusion::fusion_serve(ops, fake_env(fake, "destination"), settings = fast_settings()), "FUSION_ROLE", class = "fusion_config_error")
+    expect_error(
+      safeinsights.fusion::fusion_serve(ops, fake_env(fake, "destination"), settings = fast_settings()),
+      "FUSION_ROLE", class = "fusion_config_error"
+    )
     env <- fake_env(fake, "source")
     env[["FUSION_TUNNEL_ENDPOINT"]] <- leg_endpoint(fake, "destination")$endpoint
     env[["FUSION_TUNNEL_TOKEN"]] <- leg_endpoint(fake, "destination")$token
-    expect_error(sifusion::fusion_serve(ops, env, settings = fast_settings()), "role", class = "fusion_config_error")
-    expect_error(sifusion::fusion_serve(list(), fake_env(fake, "source"), settings = fast_settings()), "fusion_operations")
+    expect_error(safeinsights.fusion::fusion_serve(ops, env, settings = fast_settings()), "role", class = "fusion_config_error")
+    expect_error(safeinsights.fusion::fusion_serve(list(), fake_env(fake, "source"), settings = fast_settings()), "fusion_operations")
   })
 })

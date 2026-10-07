@@ -43,7 +43,7 @@ from .guards import Guards, OperationSpec
 from .simulate import SimFaults, Simulator, simulate
 from .source import Context, OperationRegistry, operations, serve
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 #: Envelope version this SDK speaks (spec/envelope.schema.json).
 ENVELOPE_VERSION = 1

@@ -1,6 +1,6 @@
 # Conformance source (R). See README.md for the operation contract.
-src <- Sys.getenv("SIFUSION_SRC", "")
-if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(sifusion))
+src <- Sys.getenv("SAFEINSIGHTS_FUSION_SRC", "")
+if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(safeinsights.fusion))
 
 ops <- fusion_operations(
   counts_by_group = fusion_operation(function(params, ctx) {

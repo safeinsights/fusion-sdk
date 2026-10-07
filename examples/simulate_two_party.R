@@ -1,5 +1,5 @@
 # Run the two-party example end to end in this process (no tunnel): what the IDE does.
-library(sifusion)
+library(safeinsights.fusion)
 here <- dirname(normalizePath(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)[1])))
 fusion_example_no_main <- TRUE
 source(file.path(here, "two-party", "source.R"), local = TRUE)

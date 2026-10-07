@@ -1,5 +1,5 @@
 # Run the hub example in this process with two simulated Data Partners; leg B is capped at one round.
-library(sifusion)
+library(safeinsights.fusion)
 here <- dirname(normalizePath(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)[1])))
 fusion_example_no_main <- TRUE
 env_a <- new.env()

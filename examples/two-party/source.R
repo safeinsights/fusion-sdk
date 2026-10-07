@@ -3,7 +3,7 @@
 # Registers the operations the Data Partner approved at review and serves them until the
 # destination completes the study. Replace the sample data with your Data Partner package's
 # data access.
-library(sifusion)
+library(safeinsights.fusion)
 
 # Sample data standing in for the Data Partner's Person-ID -> record lookup.
 sample_data <- data.frame(

@@ -66,10 +66,10 @@ json_equal <- function(a, b) {
 read_json_file <- function(path) jsonlite::fromJSON(path, simplifyVector = FALSE)
 
 # Reparse an R structure the way the wire would deliver it.
-wire_roundtrip <- function(x) sifusion:::decode_json(sifusion:::encode_json(x))
+wire_roundtrip <- function(x) safeinsights.fusion:::decode_json(safeinsights.fusion:::encode_json(x))
 
 fast_settings <- function(...) {
-  sifusion:::fusion_settings_with(sifusion::fusion_settings(character(0)),
+  safeinsights.fusion:::fusion_settings_with(safeinsights.fusion::fusion_settings(character(0)),
     ready_timeout_s = 15, ready_poll_s = 0.1, ready_poll_max_s = 0.5, poll_http_timeout_s = 5, http_timeout_s = 5,
     round_timeout_s = 5, round_max_reissues = 2L, retry_base_ms = 20, retry_max_ms = 200, memo_max_entries = 8L,
     warn_bytes = 2^20, log_level = "DEBUG", ...
@@ -79,8 +79,8 @@ fast_settings <- function(...) {
 # Capture SDK log lines for the duration of `expr`.
 capture_fusion_log <- function(expr) {
   lines <- character(0)
-  old <- sifusion::fusion_log_sink(function(line) lines <<- c(lines, line))
-  on.exit(sifusion::fusion_log_sink(old), add = TRUE)
+  old <- safeinsights.fusion::fusion_log_sink(function(line) lines <<- c(lines, line))
+  on.exit(safeinsights.fusion::fusion_log_sink(old), add = TRUE)
   force(expr)
   lines
 }

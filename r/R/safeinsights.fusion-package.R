@@ -1,4 +1,4 @@
-#' sifusion: SafeInsights Fusion SDK
+#' safeinsights.fusion: SafeInsights Fusion SDK
 #'
 #' Researcher-facing client for the SafeInsights Enclave Fusion Framework.
 #' Destination code calls [fusion_connect()] then [fusion_request()] on a peer

@@ -2,7 +2,7 @@
 #
 # Peers are keyed by the Data Partner's organization slug. One round at a time per peer. The query
 # to B is derived from A's answer: exactly the information path the source-side caps and guards bound.
-library(sifusion)
+library(safeinsights.fusion)
 
 my_person_ids <- c("p-001", "p-002", "p-003", "p-004", "p-005")
 

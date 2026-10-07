@@ -1,5 +1,5 @@
 # Hub fusion study, SOURCE B (Data Partner B, in R). Per-group outcomes and totals.
-library(sifusion)
+library(safeinsights.fusion)
 
 sample_data <- data.frame(
   person_id = c("p-001", "p-002", "p-003", "p-004", "p-005"),

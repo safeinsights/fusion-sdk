@@ -13,7 +13,7 @@ fusion_doctor <- function(env = Sys.getenv(), wait = FALSE, json = FALSE) {
   env <- as.list(env)
   s <- fusion_settings(env)
   fusion_log_configure(s$log_level)
-  report <- list(sdk = as.character(utils::packageVersion("sifusion")), apiMajor = sdk_api_major, ok = TRUE, tunnels = list())
+  report <- list(sdk = as.character(utils::packageVersion("safeinsights.fusion")), apiMajor = sdk_api_major, ok = TRUE, tunnels = list())
   cfg <- tryCatch(list(role = read_role(env), tunnels = read_tunnels(env)), fusion_error = function(e) e)
   if (inherits(cfg, "error")) {
     report$ok <- FALSE
@@ -58,7 +58,7 @@ doctor_emit <- function(report, json) {
     cat(jsonlite::toJSON(report, auto_unbox = TRUE, pretty = TRUE, null = "null"), "\n")
     return(invisible(NULL))
   }
-  cat(sprintf("sifusion %s (local API major %d)\n", report$sdk, report$apiMajor))
+  cat(sprintf("safeinsights.fusion %s (local API major %d)\n", report$sdk, report$apiMajor))
   if (!is.null(report$error)) cat("config error:", report$error, "\n") else cat("role:", report$role, "\n")
   for (row in report$tunnels) {
     status <- if (isTRUE(row$ok)) "ok" else "FAIL"

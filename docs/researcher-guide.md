@@ -20,7 +20,7 @@ with Fusion.connect() as fusion:                     # waits for every leg to be
 ```
 
 ```r
-library(sifusion)
+library(safeinsights.fusion)
 fusion <- fusion_connect()
 peer <- fusion_peer(fusion)
 r <- fusion_request(peer, "counts_by_group", list(person_ids = ids, group_by = "grade"))
@@ -87,5 +87,5 @@ the two-party and hub shapes and how to run them under the simulator.
 
 ## Checking a container
 
-`python -m safeinsights_fusion doctor [--wait]` / `sifusion::fusion_doctor(wait = TRUE)` prints each
+`python -m safeinsights_fusion doctor [--wait]` / `safeinsights.fusion::fusion_doctor(wait = TRUE)` prints each
 tunnel's leg, peer, role, state and API version (never the token) and exits non-zero on a mismatch.

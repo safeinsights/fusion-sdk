@@ -1,6 +1,6 @@
 # Conformance destination (R). See README.md for the round script and exit codes.
-src <- Sys.getenv("SIFUSION_SRC", "")
-if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(sifusion))
+src <- Sys.getenv("SAFEINSIGHTS_FUSION_SRC", "")
+if (nzchar(src)) suppressMessages(pkgload::load_all(src, quiet = TRUE)) else suppressPackageStartupMessages(library(safeinsights.fusion))
 
 out <- function(...) cat(jsonlite::toJSON(list(...), auto_unbox = TRUE, null = "null"), "\n")
 check <- function(cond, what) if (!isTRUE(cond)) stop(paste("assertion failed:", what), call. = FALSE)

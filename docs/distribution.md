@@ -17,8 +17,7 @@ schedule; vendoring is the documented fallback. Package names are final (A2, 202
    - generates a CycloneDX **SBOM** for the repository with Trivy and fails on HIGH/CRITICAL license findings,
    - creates the GitHub release with the wheel, sdist, R tarball and SBOM attached.
 4. R users install from **r-universe** (`install.packages("safeinsights.fusion", repos = "https://safeinsights.r-universe.dev")`)
-   once the `safeinsights` universe lists this repository (a `packages.json` entry pointing at the
-   `r/` subdir), or with `remotes::install_github("safeinsights/fusion-sdk", subdir = "r")`.
+   (the `safeinsights` universe lists this repository's `r/` subdir; 0.3.0 is served), or with `remotes::install_github("safeinsights/fusion-sdk", subdir = "r")`.
    A CRAN submission is a later milestone: `docs/cran-checklist.md`.
 
 ## Base images (ask S2)

@@ -8,9 +8,10 @@ App's local API is tracked in `docs/compatibility.md`.
 
 ## 0.3.0 - 2026-10-06
 
-First published release: `safeinsights-fusion` on PyPI and `safeinsights.fusion` on r-universe
-(`https://safeinsights.r-universe.dev`), with the wheel, sdist and R source tarball attached to the
-GitHub release `v0.3.0`.
+First published release: `safeinsights.fusion` on r-universe (`https://safeinsights.r-universe.dev`),
+with the wheel, sdist and R source tarball attached to the GitHub release `v0.3.0`. The PyPI publish of
+`safeinsights-fusion` did not complete (the release workflow's trusted-publisher step failed on
+2026-10-07); until it is re-run, install the wheel from the release assets.
 
 ### Changed
 

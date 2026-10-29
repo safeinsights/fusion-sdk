@@ -4,7 +4,7 @@ The SafeInsights **Fusion SDK**: the researcher-facing **R** and **Python** libr
 
 Researcher code never touches the transport. On the **destination** side it calls `request(peer, operation, params)` and gets the source's answer back; on the **source** side it registers Data-Partner-approved operation handlers and calls `serve()`. The SDK drives the per-job Fusion Tunnel App's enclave-local API (version 2): submit/poll, duplicate suppression, single in-flight round per peer, same-`correlationId` re-issue on round timeout, typed errors, budget hints, source-side guards, and content-free logging. It also owns the **fusion envelope** that travels inside the tunnel's end-to-end-encrypted payload, so an R source and a Python destination interoperate.
 
-**Status:** 0.3.0 implements local API 2 ([`spec/local-api.md`](spec/local-api.md), mirrored from `fusion-tunnel-app/src/local-api.ts`) and is proven against the in-repo fake tunnel pair; the real-tunnel switch (`FUSION_TEST_ANNOUNCE`) is ready for the tunnel's harness. Package names are final (decision A2, 2026-10-06): `safeinsights-fusion` on PyPI and `safeinsights.fusion` on r-universe.
+**Status:** 0.3.0 implements local API 2 ([`spec/local-api.md`](spec/local-api.md), mirrored from `fusion-tunnel-app/src/local-api.ts`) and is proven against the in-repo fake tunnel pair and against real tunnels through the deployed sandbox relay via `fusion-testing/dp-to-dp` (the real-tunnel switch `FUSION_TEST_ANNOUNCE`; Python and R, last green 2026-10-27). Package names are final (decision A2, 2026-10-06): `safeinsights-fusion` (wheel and sdist on the GitHub release; the PyPI publish of 0.3.0 failed on trusted-publisher configuration and is pending a re-run) and `safeinsights.fusion` on r-universe.
 
 ## Layout
 

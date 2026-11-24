@@ -3,18 +3,7 @@
 # carries a statement and, for vulnerabilities, an expiry: Trivy treats `expired_at` as
 # 00:00 UTC on that date and fails the scan again from then on, which is the intended review
 # trigger. Date an entry the day *after* the last day it should cover.
-vulnerabilities:
-    # mcp 1.29.0 in the Semgrep lock: fixed in 1.30.0, but every Semgrep release through 1.186.0
-    # pins mcp==1.29.0, so the lock cannot take the fix until Semgrep lifts the pin. The flaw is
-    # in the SDK's OAuth *client* providers (mcp.client.auth), which can send credentials to an
-    # authorization server named by an untrusted MCP server. mcp is in the tree for Semgrep's own
-    # MCP server (`semgrep mcp`); the CI job runs only `semgrep scan` with public rulesets, starts
-    # no MCP client or server and holds no OAuth credentials, so the vulnerable code is
-    # unreachable here. Bump Semgrep and delete this entry when a release allows mcp >= 1.30.0.
-    - id: CVE-2026-115563
-      paths: ['.github/semgrep/uv.lock']
-      expired_at: 2027-01-12
-      statement: mcp's OAuth client is never used by `semgrep scan`; Semgrep through 1.186.0 pins mcp==1.29.0
+vulnerabilities: []
 
 # License suppressions for Trivy's license scanner (see .github/workflows/checks.yml).
 #

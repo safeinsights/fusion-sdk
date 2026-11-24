@@ -2,13 +2,29 @@
 # apply. This workflow is the one that publishes, so the pins matter most here: `publish-pypi`
 # holds `id-token: write` (PyPI trusted publishing) and `github-release` holds
 # `contents: write`, and neither job checks out or runs repository code.
+#
+# Two ways in:
+#   - a `v*` tag push builds, publishes to PyPI and creates the GitHub release;
+#   - a manual run (`workflow_dispatch`, input `tag`) builds nothing: it takes the wheel and
+#     sdist already attached to that tag's GitHub release and publishes exactly those files to
+#     PyPI. It is the recovery path for a release whose `publish-pypi` job failed after the
+#     GitHub release was created (v0.3.0), without rebuilding assets whose hashes are pinned
+#     downstream. PyPI's trusted publisher matches on this file name and the `pypi`
+#     environment, so the manual run must stay in this workflow.
 name: Release
 on:
     push:
         tags: ['v*']
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing release tag whose wheel and sdist to publish to PyPI (e.g. v0.3.0)'
+                required: true
+                type: string
 
 jobs:
     build:
+        if: github.event_name == 'push'
         runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
@@ -63,9 +79,39 @@ jobs:
                   name: dist
                   path: dist/
 
-    publish-pypi:
-        needs: build
+    # Manual runs only: stage the Python artifacts of an existing GitHub release as `dist`, the
+    # same artifact name `build` uploads, so `publish-pypi` is identical on both paths.
+    fetch-release:
+        if: github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - name: Download the release's wheel and sdist
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::tag must look like v1.2.3"; exit 1; }
+                  version="${TAG#v}"
+                  gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist \
+                      --pattern "safeinsights_fusion-${version}-py3-none-any.whl" \
+                      --pattern "safeinsights_fusion-${version}.tar.gz"
+                  ls -l dist
+                  [ "$(find dist -type f | wc -l)" -eq 2 ] || { echo "::error::expected one wheel and one sdist on release $TAG"; exit 1; }
+                  sha256sum dist/*
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: dist
+                  path: dist/
+
+    publish-pypi:
+        needs: [build, fetch-release]
+        # Exactly one of the two is skipped on every run, which would skip this job by default.
+        if: ${{ !cancelled() && (needs.build.result == 'success' || needs.fetch-release.result == 'success') }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
         environment: pypi
         permissions:
             id-token: write # trusted publishing

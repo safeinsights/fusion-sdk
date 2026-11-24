@@ -2,7 +2,7 @@
 
 0 errors | 0 warnings | 1 note
 
-* The NOTE is `checking CRAN incoming feasibility`: new submission; the repository URL is private until launch.
+* The NOTE is `checking CRAN incoming feasibility`: new submission; the repository has been public since October 2026.
 
 ## Test environments
 
